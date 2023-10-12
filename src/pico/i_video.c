@@ -17,7 +17,15 @@
 //	DOOM graphics stuff for Pico.
 //
 
-#if PICODOOM_RENDER_NEWHOPE
+#ifndef PICO_ON_DEVICE
+#define PICO_ON_DEVICE 1
+#endif
+
+#ifndef PICOVISION
+#define PICOVISION 1
+#endif
+
+#if 1 //PICODOOM_RENDER_NEWHOPE
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
@@ -43,8 +51,13 @@
 #include "w_wad.h"
 #include "z_zone.h"
 
+#if PICOVISION
+#include "picovision/picovision.h"
+#else
 #include "pico/scanvideo.h"
 #include "pico/scanvideo/composable_scanline.h"
+#endif
+
 #include "pico/multicore.h"
 #include "pico/sync.h"
 #include "pico/time.h"
@@ -57,8 +70,14 @@
 #include "hardware/structs/xip_ctrl.h"
 #endif
 
+#if PICOVISION
+#define PIXEL_FROM_RGB8(r, g, b) (((b)>>3)|(((g)>>3)<<5)|(((r)>>3)<<10))
+#else
+#define PIXEL_FROM_RGB8(r, g, b) PICO_SCANVIDEO_PIXEL_FROM_RGB8(r, g, b)
+#endif
+
 #define YELLOW_SUBMARINE 0
-#define SUPPORT_TEXT 1
+#define SUPPORT_TEXT !PICOVISION
 #if SUPPORT_TEXT
 typedef struct __packed {
     const char * const name;
@@ -141,6 +160,7 @@ static uint32_t *text_scanline_buffer_start;
 static uint8_t *text_screen_cpy;
 static uint8_t *text_font_cpy;
 
+#if !PICOVISION
 #if USE_1280x1024x60
 //static uint32_t missing_scanline_data[] = {
 //        video_doom_offset_raw_1p | (0 << 16u),
@@ -240,6 +260,7 @@ const scanvideo_mode_t vga_mode_320x200_60 =
         };
 
 #define VGA_MODE vga_mode_320x200_60
+#endif
 #endif
 
 #if USE_INTERP
@@ -879,7 +900,7 @@ void __noinline new_frame_init_overlays_palette_and_wipe() {
                         g = gammatable[usegamma-1][g];
                         b = gammatable[usegamma-1][b];
                     }
-                    palette[i] = PICO_SCANVIDEO_PIXEL_FROM_RGB8(r, g, b);
+                    palette[i] = PIXEL_FROM_RGB8(r, g, b);
                 }
             } else {
                 int mul, r0, g0, b0;
@@ -901,7 +922,7 @@ void __noinline new_frame_init_overlays_palette_and_wipe() {
                     r += ((r0 - r) * mul) >> 16;
                     g += ((g0 - g) * mul) >> 16;
                     b += ((b0 - b) * mul) >> 16;
-                    palette[i] = PICO_SCANVIDEO_PIXEL_FROM_RGB8(r, g, b);
+                    palette[i] = PIXEL_FROM_RGB8(r, g, b);
                 }
             }
             next_pal = -1;
@@ -949,7 +970,7 @@ void __noinline new_frame_init_overlays_palette_and_wipe() {
 // this method moved out of scratchx because we didn't have quite enough space for core1 stack
 void __no_inline_not_in_flash_func(new_frame_stuff)() {
     // this part of the per frame code is in RAM as it is needed during save
-    if (sem_available(&render_frame_ready)) {
+        if (sem_available(&render_frame_ready)) {
         sem_acquire_blocking(&render_frame_ready);
         display_video_type = next_video_type;
         display_frame_index = next_frame_index;
@@ -958,7 +979,7 @@ void __no_inline_not_in_flash_func(new_frame_stuff)() {
         video_scroll = next_video_scroll; // todo does this waste too much space
 #endif
         sem_release(&display_frame_freed);
-    } else {
+            } else {
 #if !DEMO1_ONLY
         video_scroll = NULL;
 #endif
@@ -969,31 +990,70 @@ void __no_inline_not_in_flash_func(new_frame_stuff)() {
     }
 }
 
-void __scratch_x("scanlines") fill_scanlines() {
-#if SUPPORT_TEXT
-    struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation_linked(display_video_type == VIDEO_TYPE_TEXT ? 2 : 1, false);
-#else
-    struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation(false);
+#if PICOVISION
+static uint32_t scanline_buffer[SCREENWIDTH/2];
+static int16_t picovision_last_scanline = SCREENHEIGHT-1;
 #endif
+
+void __scratch_x("scanlines") fill_scanlines() {
 #if USE_INTERP
     need_save = interp_in_use;
     interp_updated = 0;
 #endif
 
-    while (buffer) {
+#if PICOVISION
+    picovision_ack_dma();
+    static int8_t frame = -1;
+
+    if (++picovision_last_scanline == SCREENHEIGHT) {
+        ++frame;
+        picovision_last_scanline = -1;
+        picovision_flip();
+        return;
+    }
+
+#if 0
+    if (picovision_last_scanline == 0) {
+        printf("Flip done\n");
+    }
+#endif
+#else
+
+#if SUPPORT_TEXT
+    struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation_linked(display_video_type == VIDEO_TYPE_TEXT ? 2 : 1, false);
+#else
+    struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation(false);
+#endif
+
+    while (buffer) 
+#endif    
+    {
+
         static int8_t last_frame_number = -1;
+#if !PICOVISION
         int frame = scanvideo_frame_number(buffer->scanline_id);
         int scanline = scanvideo_scanline_number(buffer->scanline_id);
+#else
+        int scanline = picovision_last_scanline;
+#endif
         if ((int8_t) frame != last_frame_number) {
             last_frame_number = frame;
             new_frame_stuff();
         }
 
+#if PICOVISION
+        uint32_t* data_buffer = scanline_buffer;
+#else
+        uint32_t* data_buffer = buffer->data+1;
+#endif
+
         DEBUG_PINS_SET(scanline_copy, 1);
         if (display_video_type != VIDEO_TYPE_TEXT) {
             // we don't have text mode -> normal transition yet, but we may for network game, so leaving this here - we would need to put the buffer pointers back
+#if !PICOVISION
             assert (buffer->data < text_scanline_buffer_start || buffer->data >= text_scanline_buffer_start + TEXT_SCANLINE_BUFFER_TOTAL_WORDS);
-            scanline_funcs[display_video_type](buffer->data+1, scanline);
+#endif
+            scanline_funcs[display_video_type](data_buffer, scanline);
             if (display_video_type >= FIRST_VIDEO_TYPE_WITH_OVERLAYS) {
                 assert(scanline < count_of(vpatchlists->vpatch_starters));
                 int prev = 0;
@@ -1015,7 +1075,7 @@ void __scratch_x("scanlines") fill_scanlines() {
                     patch_t *patch = resolve_vpatch_handle(overlays[vp].entry.patch_handle);
                     int yoff = scanline - overlays[vp].entry.y;
                     if (yoff < vpatch_height(patch)) {
-                        vpatchlists->vpatch_doff[vp] = draw_vpatch((uint16_t*)(buffer->data + 1), patch, &overlays[vp],
+                        vpatchlists->vpatch_doff[vp] = draw_vpatch((uint16_t*)(data_buffer), patch, &overlays[vp],
                                                                    vpatchlists->vpatch_doff[vp]);
                         prev = vp;
                     } else {
@@ -1023,6 +1083,7 @@ void __scratch_x("scanlines") fill_scanlines() {
                     }
                 }
             }
+#if !PICOVISION
             uint16_t *p = (uint16_t *) buffer->data;
             p[0] = video_doom_offset_raw_run;
             p[1] = p[2];
@@ -1030,12 +1091,14 @@ void __scratch_x("scanlines") fill_scanlines() {
             buffer->data[SCREENWIDTH / 2 + 1] = video_doom_offset_raw_1p;
             buffer->data[SCREENWIDTH / 2 + 2] = video_doom_offset_end_of_scanline_skip_ALIGN;
             buffer->data_used = SCREENWIDTH / 2 + 3;
+#endif
             DEBUG_PINS_CLR(scanline_copy, 1);
         } else {
 #if SUPPORT_TEXT
             render_text_mode_scanline(buffer, scanline);
 #else
-            memset(buffer->data + 1, 0, SCREENWIDTH * 2);
+            memset(data_buffer, 0, SCREENWIDTH * 2);
+#if !PICOVISION
             p[0] = video_doom_offset_raw_run;
             p[1] = p[2];
             p[2] = SCREENWIDTH - 3;
@@ -1043,12 +1106,17 @@ void __scratch_x("scanlines") fill_scanlines() {
             buffer->data[SCREENWIDTH / 2 + 2] = video_doom_offset_end_of_scanline_skip_ALIGN;
             buffer->data_used = SCREENWIDTH / 2 + 3;
 #endif
+#endif
         }
+#if PICOVISION
+        picovision_write_line(scanline, data_buffer);
+#else
         scanvideo_end_scanline_generation(buffer);
 #if SUPPORT_TEXT
         buffer = scanvideo_begin_scanline_generation_linked(display_video_type == VIDEO_TYPE_TEXT ? 2 : 1, false);
 #else
         buffer = scanvideo_begin_scanline_generation(false);
+#endif
 #endif
     }
 #if USE_INTERP
@@ -1073,6 +1141,7 @@ static void __not_in_flash_func(free_buffer_callback)() {
 
 //static semaphore_t init_sem;
 static void core1() {
+#if !PICOVISION
 #if !PICO_ON_DEVICE
     void simulate_video_pio_video_doom(const uint32_t *dma_data, uint32_t dma_data_size,
                                        uint16_t *pixel_buffer, int32_t max_pixels, int32_t expected_width, bool overlay);
@@ -1089,10 +1158,21 @@ static void core1() {
 #if PICO_ON_DEVICE
     irq_set_pending(LOW_PRIO_IRQ);
 #endif
+#else
+    irq_set_exclusive_handler(LOW_PRIO_IRQ, fill_scanlines);
+    irq_set_enabled(LOW_PRIO_IRQ, true);
+    irq_set_exclusive_handler(DMA_IRQ_0, fill_scanlines);
+    irq_set_enabled(DMA_IRQ_0, true);
+    picovision_init();
+#endif
     sem_release(&core1_launch);
+#if PICOVISION
+    fill_scanlines();
+#endif
     while (true) {
         pd_core1_loop();
 #if PICO_ON_DEVICE
+        //printf("%d\n", picovision_last_scanline);
         tight_loop_contents();
 #else
         fill_scanlines();
@@ -1179,6 +1259,10 @@ int I_GetPaletteIndex(int r, int g, int b)
 
 #if !NO_USE_ENDDOOM
 void I_Endoom(byte *endoom_data) {
+#if PICOVISION
+    // TODO
+    return;
+#else
     uint32_t size;
     uint8_t *wa = pd_get_work_area(&size);
     assert(size >=TEXT_SCANLINE_BUFFER_TOTAL_WORDS * 4 + 80*25*2 + 4096);
@@ -1210,6 +1294,7 @@ void I_Endoom(byte *endoom_data) {
     }
 #endif
     text_screen_data = text_screen_cpy;
+#endif
 }
 #endif
 
@@ -1364,6 +1449,7 @@ void I_DisplayFPSDots(boolean dots_on)
 }
 
 #if PICO_ON_DEVICE
+#if !PICOVISION
 bool video_doom_adapt_for_mode(const struct scanvideo_pio_program *program, const struct scanvideo_mode *mode,
                                struct scanvideo_scanline_buffer *missing_scanvideo_scanline_buffer, uint16_t *modifiable_instructions) {
     missing_scanvideo_scanline_buffer->data = missing_scanline_data;
@@ -1376,6 +1462,7 @@ pio_sm_config video_doom_configure_pio(pio_hw_t *pio, uint sm, uint offset) {
     scanvideo_default_configure_pio(pio, sm, offset, &config, false);
     return config;
 }
+#endif
 #else
 void simulate_video_pio_video_doom(const uint32_t *dma_data, uint32_t dma_data_size,
                                    uint16_t *pixel_buffer, int32_t max_pixels, int32_t expected_width, bool overlay) {

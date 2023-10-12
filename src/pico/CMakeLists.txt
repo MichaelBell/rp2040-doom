@@ -8,6 +8,9 @@ target_sources(common_pico INTERFACE
         ${CMAKE_CURRENT_LIST_DIR}/i_video.c
         ${CMAKE_CURRENT_LIST_DIR}/stubs.c
 
+        ${CMAKE_CURRENT_LIST_DIR}/picovision/aps6404.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/picovision/picovision.cpp
+
         ${CMAKE_CURRENT_LIST_DIR}/i_picosound.c
 )
 if (PICO_ON_DEVICE)
@@ -37,7 +40,8 @@ target_compile_definitions(common_pico INTERFACE
         )
 
 pico_generate_pio_header(common_pico ${CMAKE_CURRENT_LIST_DIR}/video_doom.pio)
-target_link_libraries(common_pico INTERFACE pico_stdlib pico_multicore pico_scanvideo_dpi)
+pico_generate_pio_header(common_pico ${CMAKE_CURRENT_LIST_DIR}/picovision/aps6404.pio)
+target_link_libraries(common_pico INTERFACE pico_stdlib pico_multicore) #pico_scanvideo_dpi)
 
 add_library(pico_cd INTERFACE)
 if (TARGET tinyusb_host)
