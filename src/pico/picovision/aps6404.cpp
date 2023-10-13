@@ -285,7 +285,7 @@ namespace pimoroni {
         }
     }
 
-    void APS6404::write_fast_irq(uint32_t addr, uint32_t* data, uint32_t len_in_bytes) {
+    void __not_in_flash_func(APS6404::write_fast_irq)(uint32_t addr, uint32_t* data, uint32_t len_in_bytes) {
         critical_section_enter_blocking(&mutex);
         if (!last_cmd_was_write) {
             last_cmd_was_write = true;
@@ -369,7 +369,7 @@ namespace pimoroni {
         }
     }
 
-    void APS6404::read_fast_blocking(uint32_t addr, uint32_t* read_buf, uint32_t len_in_words) {
+    void __not_in_flash_func(APS6404::read_fast_blocking)(uint32_t addr, uint32_t* read_buf, uint32_t len_in_words) {
         critical_section_enter_blocking(&mutex);
         last_cmd_was_write = false;
         wait_for_finish_blocking();

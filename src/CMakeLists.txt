@@ -1,5 +1,6 @@
 if (PICO_SDK)
     set(BINARIES doom)
+    add_compile_options(-O2 -fgcse-after-reload -floop-interchange -fpeel-loops -fpredictive-commoning -fsplit-paths -ftree-loop-distribute-patterns -ftree-loop-distribution -ftree-vectorize -ftree-partial-pre -funswitch-loops)
 else()
     # comment out heretic/hexen/strife for now, as whilst they may build, how well they work is unclear
 #    set(BINARIES doom heretic hexen strife setup)

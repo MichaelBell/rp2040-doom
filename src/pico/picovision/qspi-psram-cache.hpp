@@ -5,7 +5,7 @@
 
 namespace ramshim {
 
-  void read_page(uint32_t a, uint32_t *buffer, uint32_t len_in_words) {
+  void __not_in_flash_func(read_page)(uint32_t a, uint32_t *buffer, uint32_t len_in_words) {
     ram.read_fast_blocking(a, buffer, len_in_words);
   }
 
@@ -54,26 +54,26 @@ namespace ramshim {
 
     // generic getter
     template <typename T>
-    T get(uint32_t a) {return *((T *)(data + a));}
+    __always_inline T get(uint32_t a) {return *((T *)(data + a));}
 
     // generic setter
     template <typename T>
-    void set(uint32_t a, T v) {*((T *)(data + a)) = v; dirty = true;}
+    __always_inline void set(uint32_t a, T v) {*((T *)(data + a)) = v; dirty = true;}
 
     // unsigned getters
-    uint32_t u32(uint32_t a) {return get<uint32_t>(a);}
-    uint16_t u16(uint32_t a) {return get<uint16_t>(a);}
-    uint8_t   u8(uint32_t a) {return get< uint8_t>(a);}
+    __always_inline uint32_t u32(uint32_t a) {return get<uint32_t>(a);}
+    __always_inline uint16_t u16(uint32_t a) {return get<uint16_t>(a);}
+    __always_inline uint8_t   u8(uint32_t a) {return get< uint8_t>(a);}
 
     // signed getters
-    int32_t  s32(uint32_t a) {return get<int32_t>(a);}
-    int16_t  s16(uint32_t a) {return get<int16_t>(a);}
-    int8_t    s8(uint32_t a) {return get< int8_t>(a);}
+    __always_inline int32_t  s32(uint32_t a) {return get<int32_t>(a);}
+    __always_inline int16_t  s16(uint32_t a) {return get<int16_t>(a);}
+    __always_inline int8_t    s8(uint32_t a) {return get< int8_t>(a);}
 
     // unsigned setters
-    void     u32(uint32_t a, uint32_t v) {set<uint32_t>(a, v);}
-    void     u16(uint32_t a, uint16_t v) {set<uint16_t>(a, v);}
-    void      u8(uint32_t a,  uint8_t v) {set< uint8_t>(a, v);}
+    __always_inline void     u32(uint32_t a, uint32_t v) {set<uint32_t>(a, v);}
+    __always_inline void     u16(uint32_t a, uint16_t v) {set<uint16_t>(a, v);}
+    __always_inline void      u8(uint32_t a,  uint8_t v) {set< uint8_t>(a, v);}
   };
 
   struct cache_t {
@@ -85,27 +85,27 @@ namespace ramshim {
     cache_t(uint32_t _ram_start) : _ram_start(_ram_start) {
     }
 
-    uint32_t address_to_id(uint32_t a) {
+    __always_inline uint32_t address_to_id(uint32_t a) {
       // return the page id for the given address
       return ((a & _id_mask) - _ram_start);
     }
 
-    uint32_t address_to_offset(uint32_t a) {
+    __always_inline uint32_t address_to_offset(uint32_t a) {
       // return the page offset for the given address
       return a & _address_mask;
     }
 
-    uint32_t id_to_entry(uint32_t id) {
+    __always_inline uint32_t id_to_entry(uint32_t id) {
       return (id >> _page_bits) & ((1 << _page_count_bits) - 1);
     }
 
-    page_t *peek_page(uint32_t a) {
+    __always_inline page_t *peek_page(uint32_t a) {
       uint32_t id = address_to_id(a);
       uint32_t entry = id_to_entry(id);
       return pages[entry].id == id ? &pages[entry] : nullptr;
     }
 
-    page_t *fetch_page(uint32_t a) {
+    page_t *__not_in_flash_func(fetch_page)(uint32_t a) {
       // convert requested address to start of page address
       uint32_t id = address_to_id(a);
       uint32_t entry = id_to_entry(id);
@@ -132,17 +132,17 @@ namespace ramshim {
     }
 
     // retrieve helpers
-    uint32_t u32(uint32_t a) {return fetch_page(a)->u32(address_to_offset(a));}
-    uint16_t u16(uint32_t a) {return fetch_page(a)->u16(address_to_offset(a));}
-    uint8_t   u8(uint32_t a) {return fetch_page(a)->u8 (address_to_offset(a));}
-    int32_t  s32(uint32_t a) {return fetch_page(a)->s16(address_to_offset(a));}
-    int16_t  s16(uint32_t a) {return fetch_page(a)->s16(address_to_offset(a));}
-    int8_t    s8(uint32_t a) {return fetch_page(a)->s8 (address_to_offset(a));}
+    __always_inline uint32_t u32(uint32_t a) {return fetch_page(a)->u32(address_to_offset(a));}
+    __always_inline uint16_t u16(uint32_t a) {return fetch_page(a)->u16(address_to_offset(a));}
+    __always_inline uint8_t   u8(uint32_t a) {return fetch_page(a)->u8 (address_to_offset(a));}
+    __always_inline int32_t  s32(uint32_t a) {return fetch_page(a)->s16(address_to_offset(a));}
+    __always_inline int16_t  s16(uint32_t a) {return fetch_page(a)->s16(address_to_offset(a));}
+    __always_inline int8_t    s8(uint32_t a) {return fetch_page(a)->s8 (address_to_offset(a));}
 
     // store helpers
-    void u32(uint32_t a, uint32_t v) {fetch_page(a)->u32(address_to_offset(a), v);}
-    void u16(uint32_t a, uint16_t v) {fetch_page(a)->u16(address_to_offset(a), v);}
-    void  u8(uint32_t a, uint8_t  v) {fetch_page(a)->u8 (address_to_offset(a), v);}
+    __always_inline void u32(uint32_t a, uint32_t v) {fetch_page(a)->u32(address_to_offset(a), v);}
+    __always_inline void u16(uint32_t a, uint16_t v) {fetch_page(a)->u16(address_to_offset(a), v);}
+    __always_inline void  u8(uint32_t a, uint8_t  v) {fetch_page(a)->u8 (address_to_offset(a), v);}
   };
 
 }

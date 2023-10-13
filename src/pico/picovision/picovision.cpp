@@ -64,11 +64,12 @@ static constexpr uint I2C_REG_SCROLL_BASE = 0xE0;
 static uint8_t bank = 0;
 
   static volatile bool enable_switch_on_vsync = false;
+  static volatile bool enable_notify_on_vsync = false;
 
 // Used to re-trigger scanline fill
 #define LOW_PRIO_IRQ 31
 
-  static void vsync_callback() {
+  static void __not_in_flash_func(vsync_callback)() {
     if (gpio_get_irq_event_mask(VSYNC) & GPIO_IRQ_EDGE_RISE) {
       gpio_acknowledge_irq(VSYNC, GPIO_IRQ_EDGE_RISE);
 
@@ -77,9 +78,19 @@ static uint8_t bank = 0;
         critical_section_enter_blocking(&ram.mutex);
         ram.wait_for_finish_blocking();
         gpio_xor_mask(1 << RAM_SEL);
-        critical_section_exit(&ram.mutex);
 
         enable_switch_on_vsync = false;
+        enable_notify_on_vsync = false;
+        *((io_rw_32 *) (PPB_BASE + M0PLUS_NVIC_ISPR_OFFSET)) = 1u << LOW_PRIO_IRQ;
+
+        for (int i = 0; i < 10; ++i) {
+          asm volatile("nop\nnop\nnop\nnop\n");
+        }
+
+        critical_section_exit(&ram.mutex);
+      }
+      else if (enable_notify_on_vsync) {
+        enable_notify_on_vsync = false;
         *((io_rw_32 *) (PPB_BASE + M0PLUS_NVIC_ISPR_OFFSET)) = 1u << LOW_PRIO_IRQ;
       }
     }
@@ -210,7 +221,7 @@ void picovision_init()
     }
 }
 
-void picovision_write_line(int y, uint32_t* data)
+void __not_in_flash_func(picovision_write_line)(int y, uint32_t* data)
 {
     // TODO
     #if 0
@@ -224,7 +235,7 @@ void picovision_write_line(int y, uint32_t* data)
     ram.write_fast_irq(addr, data, 320*2);
 }
 
-void picovision_flip()
+void __not_in_flash_func(picovision_flip)()
 {
     bank ^= 1;
     ram.wait_for_finish_blocking();
@@ -236,7 +247,12 @@ void picovision_flip()
     //gpio_xor_mask(1 << RAM_SEL);    
 }
 
-void picovision_ack_dma()
+void __not_in_flash_func(picovision_notify_next_vsync)()
+{
+  enable_notify_on_vsync = true;
+}
+
+void __not_in_flash_func(picovision_ack_dma)()
 {
     ram.ack_dma_irq();
 }

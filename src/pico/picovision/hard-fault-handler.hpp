@@ -33,27 +33,27 @@ namespace ramshim {
   // the registers are on the stack in the order 5, 6, 7, 8, 0, 1, 2, 3
   // this function takes the "natural" index of a register (e.g. 0 for r0,
   // or 2 for r2) and returns the index of it on the stack.
-  uint8_t stack_index(uint8_t i) {
+  __always_inline uint8_t stack_index(uint8_t i) {
     uint8_t map[8] = {R0, R1, R2, R3, R4, R5, R6, R7};
     return map[i];
   }
 
   // calculate address for register instruction
-  uint32_t raddr(uint16_t ins, uint32_t* stack) {
+  __always_inline uint32_t raddr(uint16_t ins, uint32_t* stack) {
     uint8_t n = (ins & 0b000111000) >> 3;
     uint8_t m = (ins & 0b111000000) >> 6;
     return (stack[stack_index(n)] + stack[stack_index(m)]);
   }
 
   // calculate address for immediate instruction
-  uint32_t iaddr(uint16_t ins, uint8_t mul, uint32_t* stack) {
+  __always_inline uint32_t iaddr(uint16_t ins, uint8_t mul, uint32_t* stack) {
     uint8_t n = (ins & 0b000111000) >> 3;
     uint8_t o = (ins >> 6) & 0b11111;
     return (stack[stack_index(n)] + o * mul);
   }
 
   // return the source/target register for the instruction
-  uint32_t *srctar(uint16_t ins, uint32_t* stack) {
+  __always_inline uint32_t *srctar(uint16_t ins, uint32_t* stack) {
     uint8_t t = (ins & 0b000000111) >> 0;
     return &stack[stack_index(t)];
   }
@@ -70,7 +70,7 @@ extern "C"
   // - xPSR
 
 #if 1
-  void isr_hardfault()
+  void __not_in_flash_func(isr_hardfault)()
   {
     asm(
       // push link register onto the stack
@@ -118,7 +118,7 @@ extern "C"
 
   // stm         11000 nnnrrrrrrrr
 
-  void hard_fault_handler_c(uint32_t *stack)
+  void __not_in_flash_func(hard_fault_handler_c)(uint32_t *stack)
   {
     const uint16_t *&pc = reinterpret_cast<const uint16_t*&>(stack[ramshim::PC]);
     const uint16_t ins = *pc;

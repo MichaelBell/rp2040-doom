@@ -291,7 +291,7 @@ cheatseq_t cheat_ammonokey = CHEAT("idfa", 0);
 cheatseq_t cheat_noclip = CHEAT("idspispopd", 0);
 cheatseq_t cheat_commercial_noclip = CHEAT("idclip", 0);
 #if USE_FPS
-boolean show_fps;//=1;
+boolean show_fps=1;
 #endif
 
 cheatseq_t	cheat_powerup[7] =
