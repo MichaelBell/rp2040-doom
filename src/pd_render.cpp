@@ -2338,6 +2338,12 @@ static void __noinline draw_regular_columns(int core) {
                 draw_patch_columns(-id, i, (int16_t*)buffer, buffer + WHD_PATCH_MAX_WIDTH * 2, translated);
                 DEBUG_PINS_CLR(render_thing, 1<<core);
             }
+
+            if (!core) {
+                restart_song_state |= 1; // we may not restart a song during this call because it may blow the stack
+                I_UpdateSound();
+                restart_song_state &= ~1;
+            }
         }
     }
 }
@@ -2784,6 +2790,9 @@ void pd_end_frame(int wipe_start) {
     }
 #endif
     sem_release(&core0_done);
+    while (!sem_available(&core1_done)) {
+        I_UpdateSound();
+    }
     sem_acquire_blocking(&core1_done);
     draw_fuzz_columns();
     DEBUG_PINS_CLR(full_render, 1);

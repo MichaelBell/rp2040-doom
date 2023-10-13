@@ -134,7 +134,11 @@ void write_header()
 
 void read_wxd()
 {
+#if WHD_SUPER_TINY
     FRESULT fr = f_open(&fil, "/doom1.whx", FA_READ);
+#else
+    FRESULT fr = f_open(&fil, "/doom1.whd", FA_READ);
+#endif
     if (fr != FR_OK) {
         printf("Failed to open WHX file, error: %d\n", fr);
         return;

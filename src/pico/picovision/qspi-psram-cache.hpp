@@ -79,10 +79,13 @@ namespace ramshim {
   struct cache_t {
     uint32_t _ram_start;
 
+    critical_section_t _crit;
+
     // hidden storage for all of the possible pages
     page_t pages[_page_count];
 
     cache_t(uint32_t _ram_start) : _ram_start(_ram_start) {
+      critical_section_init(&_crit);
     }
 
     __always_inline uint32_t address_to_id(uint32_t a) {
@@ -132,17 +135,49 @@ namespace ramshim {
     }
 
     // retrieve helpers
-    __always_inline uint32_t u32(uint32_t a) {return fetch_page(a)->u32(address_to_offset(a));}
-    __always_inline uint16_t u16(uint32_t a) {return fetch_page(a)->u16(address_to_offset(a));}
-    __always_inline uint8_t   u8(uint32_t a) {return fetch_page(a)->u8 (address_to_offset(a));}
-    __always_inline int32_t  s32(uint32_t a) {return fetch_page(a)->s16(address_to_offset(a));}
-    __always_inline int16_t  s16(uint32_t a) {return fetch_page(a)->s16(address_to_offset(a));}
-    __always_inline int8_t    s8(uint32_t a) {return fetch_page(a)->s8 (address_to_offset(a));}
+    __always_inline uint32_t u32(uint32_t a) {
+      critical_section_enter_blocking(&_crit);
+      uint32_t r = fetch_page(a)->u32(address_to_offset(a));
+      critical_section_exit(&_crit);
+      return r;
+    }
+    __always_inline uint16_t u16(uint32_t a) {
+      critical_section_enter_blocking(&_crit);
+      uint16_t r = fetch_page(a)->u16(address_to_offset(a));
+      critical_section_exit(&_crit);
+      return r;
+    }
+    __always_inline uint8_t   u8(uint32_t a) {
+      critical_section_enter_blocking(&_crit);
+      uint8_t r = fetch_page(a)->u8(address_to_offset(a));
+      critical_section_exit(&_crit);
+      return r;
+    }
+    __always_inline int32_t  s32(uint32_t a) {
+      critical_section_enter_blocking(&_crit);
+      int32_t r = fetch_page(a)->s32(address_to_offset(a));
+      critical_section_exit(&_crit);
+      return r;
+    }
+    __always_inline int16_t  s16(uint32_t a) {
+      critical_section_enter_blocking(&_crit);
+      int16_t r = fetch_page(a)->s16(address_to_offset(a));
+      critical_section_exit(&_crit);
+      return r;
+    }
+    __always_inline int8_t    s8(uint32_t a) {
+      critical_section_enter_blocking(&_crit);
+      int8_t r = fetch_page(a)->s8(address_to_offset(a));
+      critical_section_exit(&_crit);
+      return r;
+    }
 
+#if 0
     // store helpers
     __always_inline void u32(uint32_t a, uint32_t v) {fetch_page(a)->u32(address_to_offset(a), v);}
     __always_inline void u16(uint32_t a, uint16_t v) {fetch_page(a)->u16(address_to_offset(a), v);}
     __always_inline void  u8(uint32_t a, uint8_t  v) {fetch_page(a)->u8 (address_to_offset(a), v);}
+#endif
   };
 
 }

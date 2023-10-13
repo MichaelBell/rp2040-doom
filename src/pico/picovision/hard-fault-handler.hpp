@@ -183,19 +183,23 @@ extern "C"
 #endif
     // loading instructions
 
+#if 0
     if(opcode == 0b01001) { // ldr (lit)
-      uint32_t  a = ramshim::iaddr(ins, 4, stack);
-      uint32_t *t = ramshim::srctar(ins, stack);
+      __breakpoint();
+      uint32_t  a = (stack[ramshim::PC] & ~3u) + (ins & 0xFF);
+      uint32_t *t = &stack[ramshim::stack_index((ins >> 8) & 0b111)];
 
       // printf("LDR (imm) %#010x > %#010x\n", a, *t);
       *t = ramshim::_cache.u32(a);
 
       pc++; return;
     }
-
+#endif
 
     if(opcode == 0b01010 && variant == 0b11) { // ldrsb (reg)
       uint32_t a =  ramshim::raddr(ins, stack);
+      if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
+
       int32_t *t = (int32_t *)ramshim::srctar(ins, stack);
       // printf("ldrsb (reg): ");
       *t = ramshim::_cache.s8(a);
@@ -204,6 +208,8 @@ extern "C"
 
     if(opcode == 0b01011) { // ldr/ldrb/ldrh/ldrsh (reg)
       uint32_t  a =  ramshim::raddr(ins, stack);
+      if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
+
       uint32_t *t = ramshim::srctar(ins, stack);
       if(variant == 0b00) {                             // ldr
         //uint32_t *t = (uint32_t *)ramshim::srctar(ins, stack);
@@ -227,6 +233,8 @@ extern "C"
 
     if(opcode == 0b01101) { // ldr (imm)
       uint32_t  a =  ramshim::iaddr(ins, 4, stack);
+      if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
+
       uint32_t *t = ramshim::srctar(ins, stack);
       //printf("ldr (imm) 0x%08x\n", a);
       *t = ramshim::_cache.u32(a);
@@ -235,6 +243,8 @@ extern "C"
 
     if(opcode == 0b10001) { // ldrh (imm)
       uint32_t a = ramshim::iaddr(ins, 2, stack);
+      if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
+
       uint32_t *t = ramshim::srctar(ins, stack);
       // printf("ldrh (imm): ");
       *t = ramshim::_cache.u16(a);
@@ -243,6 +253,8 @@ extern "C"
 
     if(opcode == 0b01111) { // ldrb (imm)
       uint32_t  a =  ramshim::iaddr(ins, 1, stack);
+      if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
+
       uint32_t *t = ramshim::srctar(ins, stack);
       // printf("ldrb (imm): 0x%08x", a);
       *t = ramshim::_cache.u8(a);
@@ -253,6 +265,8 @@ extern "C"
       // TODO: Could do a longer read from cache.
       uint32_t addr_reg = (ins >> 8) & 0b111;
       uint32_t  a = stack[ramshim::stack_index(addr_reg)];
+      if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
+
       uint32_t regs = ins & 0xFF;
       bool wback = !(regs & (1 << addr_reg));
       for (uint8_t i = 0; regs; ++i, regs >>= 1) {
@@ -270,6 +284,8 @@ extern "C"
 
       pc++; return;
     }
+
+    __breakpoint();
   }
 
 }

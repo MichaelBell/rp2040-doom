@@ -336,6 +336,8 @@ static void I_Pico_UpdateSound(void)
     // todo hopefully at least we can run the AI fast enough.
     audio_buffer_t *buffer = take_audio_buffer(producer_pool, false);
     if (buffer) {
+        //if (buffer->buffer->size != 0x1000) __breakpoint();
+        //if ((uintptr_t)buffer->buffer->bytes & 3) __breakpoint();
         if (music_generator) {
             // todo think about volume; this already has a (<< 3) in it
             music_generator(buffer);
