@@ -17,14 +17,6 @@
 //	DOOM graphics stuff for Pico.
 //
 
-#ifndef PICO_ON_DEVICE
-#define PICO_ON_DEVICE 1
-#endif
-
-#ifndef PICOVISION
-#define PICOVISION 1
-#endif
-
 #if 1 //PICODOOM_RENDER_NEWHOPE
 #include <stdio.h>
 #include <string.h>
@@ -995,7 +987,8 @@ static uint32_t scanline_buffer[SCREENWIDTH/2];
 static int16_t picovision_last_scanline = SCREENHEIGHT-1;
 #endif
 
-void __scratch_x("scanlines") fill_scanlines() {
+//void __scratch_x("scanlines") fill_scanlines() {
+void __no_inline_not_in_flash_func(fill_scanlines)() {
 #if USE_INTERP
     need_save = interp_in_use;
     interp_updated = 0;

@@ -318,6 +318,8 @@ add_library(small_doom_common INTERFACE)
 target_link_libraries(small_doom_common INTERFACE adpcm-lib) # handy to have about
 
 target_compile_definitions(small_doom_common INTERFACE
+        PICOVISION=1
+
         SHRINK_MOBJ=1 # may break saved games
 
         DOOM_ONLY=1 # don't support hexxen etc.
@@ -633,7 +635,7 @@ if (PICO_SDK)
             NO_USE_FINALE_BUNNY=1
     )
     target_compile_definitions(doom_tiny PRIVATE
-            TINY_WAD_ADDR=0x10040000
+            TINY_WAD_ADDR=0x10042000
     )
     target_link_libraries(doom_tiny PRIVATE tiny_settings)
     add_doom_tiny(_nost render_newhope)
@@ -648,7 +650,7 @@ if (PICO_SDK)
         target_link_libraries(doom_tiny_usb PRIVATE tiny_settings pico_cd)
         target_compile_definitions(doom_tiny_usb PRIVATE
                 USB_SUPPORT=1
-                TINY_WAD_ADDR=0x10042000 # ugh tinyusb is >8K currently!!
+                TINY_WAD_ADDR=0x2f400000 # ugh tinyusb is >8K currently!!
         )
         add_doom_tiny(_nost_usb render_newhope)
         target_link_libraries(doom_tiny_nost_usb PRIVATE pico_cd)

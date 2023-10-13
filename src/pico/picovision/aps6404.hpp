@@ -3,12 +3,15 @@
 #include <stdint.h>
 #include "hardware/pio.h"
 #include "hardware/dma.h"
+#include "pico/sync.h"
 
 namespace pimoroni {
     class APS6404 {
         public:
             static constexpr int RAM_SIZE = 8 * 1024 * 1024;
             static constexpr int PAGE_SIZE = 1024;
+
+            critical_section_t mutex;
 
             APS6404(uint pin_csn = 17, uint pin_d0 = 19, PIO pio = pio0);
 
@@ -42,6 +45,9 @@ namespace pimoroni {
                 read(addr, read_buf, len_in_words);
                 wait_for_finish_blocking();
             }
+
+            // Read a buffer that does not cross a page boundary
+            void read_fast_blocking(uint32_t addr, uint32_t* read_buf, uint32_t len_in_words);
 
             // Block until any outstanding read or write completes
             void wait_for_finish_blocking() {
