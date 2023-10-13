@@ -164,6 +164,12 @@ did my ancient
 Dell keyboard. Your keyboard may just do nothing, or may cause a crash. If so, for now, you are stuck forwarding 
 keys from another PC via sdl_event_forwarder.
 
+### Running RP2040 Doom on PicoVision
+
+Currently the PicoVision GPU has to be loaded by an external Pico connected to the GPU SWD/SWC pins.  This is because the flash space is too tight to fit the GPU firmware in addition to the doom1.whx compressed WAD.  We are looking into options for making this work!
+
+[boot_gpu](https://github.com/MichaelBell/boot_gpu) can be used to load the GPU firmware.  Connect pins 2 and 3 on a Pico running boot_gpu to the GPU SWC and SWD, then connect to the console on that Pico over USB.  Before starting RP2040 Doom on the PicoVision CPU (by copying the doom_tiny uf2 to it or rebooting with picotool after loading), reload the GPU firmware by hitting enter in the console.
+
 ### RP2040 Doom builds not targeting an RP2040 device
 
 You can also build the RP2040 Doom to run on your host computer (Linux or macOS) by using
