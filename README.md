@@ -112,12 +112,10 @@ You can create a build directly like this:
 ```bash
 mkdir rp2040-build
 cd rp2040-build
-cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DPICO_BOARD=vgaboard -DPICO_SDK_PATH=/path/to/pico-sdk -DPICO_EXTRAS_PATH=/path/to/pico-extras ..
+cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DPICO_BOARD=pimoroni_picovision -DPICO_SDK_PATH=/path/to/pico-sdk -DPICO_EXTRAS_PATH=/path/to/pico-extras -DCMAKE_C_COMPILER:FILEPATH=/path/to/gcc-arm-none-eabi-9-2020-q2-update/bin/arm-none-eabi-gcc -DCMAKE_CXX_COMPILER:FILEPATH=/path/to/gcc-arm-none-eabi-9-2020-q2-update/bin/arm-none-eabi-g++ ..
 ```
 
-Note that the `PICO_BOARD` setting is for the standard VGA demo board which has RGB on pins 0->15, sync pins on 16,17 
-and 
-I2S on 26,27,28.
+The Pimoroni Picovision board file is in this repo for now, copy it to `pico-sdk/src/boards/include/boards`.
 
 As before, use `make` or `make <target>` to build. 
 
