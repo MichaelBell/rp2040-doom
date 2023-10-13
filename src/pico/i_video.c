@@ -781,7 +781,7 @@ static inline uint draw_vpatch(uint16_t *dest, patch_t *patch, vpatchlist_t *vp,
                         source -= 3;
                         i = (source - (const uint8_t *) data_cache);
                     }
-                    if (true) {
+                    if (false) {
                         //                        once = true;
                         xip_ctrl_hw->stream_ctr = 0;
                         // workaround yucky bug

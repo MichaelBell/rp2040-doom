@@ -41,7 +41,7 @@ namespace ramshim {
 
   // can be set to whatever makes sense for ram/performance tradeoff. by
   // default we allocate 256 pages which is 8KB.
-  constexpr static uint32_t _page_count_bits = 6;
+  constexpr static uint32_t _page_count_bits = 8;
   constexpr static uint32_t _page_count = 1 << _page_count_bits;
 
   constexpr static uint32_t _address_mask  = _page_size - 1;

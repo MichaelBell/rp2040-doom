@@ -196,7 +196,7 @@ extern "C"
 
     if(opcode == 0b01010 && variant == 0b11) { // ldrsb (reg)
       uint32_t a =  ramshim::raddr(ins, stack);
-      int8_t *t = (int8_t *)ramshim::srctar(ins, stack);
+      int32_t *t = (int32_t *)ramshim::srctar(ins, stack);
       // printf("ldrsb (reg): ");
       *t = ramshim::_cache.s8(a);
       pc++; return;
@@ -218,7 +218,7 @@ extern "C"
         // printf("ldrb (reg): ");
         *t = ramshim::_cache.u8(a);
       } else if(variant == 0b11) {                      // ldrsh
-        //int16_t *t = (int16_t *)ramshim::srctar(ins, stack);
+        int32_t *t = (int32_t *)ramshim::srctar(ins, stack);
         // printf("ldrsh (reg): ");
         *t = ramshim::_cache.s16(a);
       }
@@ -255,7 +255,7 @@ extern "C"
       uint32_t  a = stack[ramshim::stack_index(addr_reg)];
       uint32_t regs = ins & 0xFF;
       bool wback = !(regs & (1 << addr_reg));
-      for (int i = 0; regs; ++i, regs >>= 1) {
+      for (uint8_t i = 0; regs; ++i, regs >>= 1) {
         if (regs & 1) {
           uint32_t *t = &stack[ramshim::stack_index(i)];
           *t = ramshim::_cache.u32(a);
