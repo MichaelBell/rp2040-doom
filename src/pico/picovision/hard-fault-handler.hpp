@@ -40,21 +40,21 @@ namespace ramshim {
 
   // calculate address for register instruction
   __always_inline uint32_t raddr(uint16_t ins, uint32_t* stack) {
-    uint8_t n = (ins & 0b000111000) >> 3;
-    uint8_t m = (ins & 0b111000000) >> 6;
+    uint8_t n = (ins >> 3) & 0b111;
+    uint8_t m = (ins >> 6) & 0b111;
     return (stack[stack_index(n)] + stack[stack_index(m)]);
   }
 
   // calculate address for immediate instruction
   __always_inline uint32_t iaddr(uint16_t ins, uint8_t mul, uint32_t* stack) {
-    uint8_t n = (ins & 0b000111000) >> 3;
+    uint8_t n = (ins >> 3) & 0b111;
     uint8_t o = (ins >> 6) & 0b11111;
     return (stack[stack_index(n)] + o * mul);
   }
 
   // return the source/target register for the instruction
   __always_inline uint32_t *srctar(uint16_t ins, uint32_t* stack) {
-    uint8_t t = (ins & 0b000000111) >> 0;
+    uint8_t t = ins & 0b111;
     return &stack[stack_index(t)];
   }
 
@@ -76,8 +76,15 @@ extern "C"
       // put the stack pointer into r0, this points at the standard fault stack
       "mrs r0, msp\n"
 
+      "ldr r3, [r0, #24]\n"  // Get PC
+      "ldrh r1, [r3]\n"      // Get instruction and stash in r1 for handler
+      "lsr r3, r1, #11\n"    // Opcode
+      "lsl r3, r3, #2\n"     // 4 byte wide pointers
+      "ldr  r2, =(handler_funcs - 40)\n"  // Handler table, adjusted as starts from 10.
+      "ldr  r3, [r3, r2]\n"  // Address of handler
+
       // jump into our fault handler, which will immediately push {r4, r5, r6, r7, lr} below the fault stack.
-      "b hard_fault_handler_c\n"
+      "bx r3\n"
     );
   }
 #endif
@@ -106,174 +113,135 @@ extern "C"
 
   // stm         11000 nnnrrrrrrrr
 
-  void __not_in_flash_func(hard_fault_handler_c)(uint32_t *stack)
+  void __not_in_flash_func(hard_fault_ldrsb)(uint32_t *stack, const uint16_t ins)
   {
-    const uint16_t *&pc = reinterpret_cast<const uint16_t*&>(stack[ramshim::PC]);
-    const uint16_t ins = *pc;
-    const uint8_t opcode  = (ins >> 11) & 0b11111; // 5 bit op code
     const uint8_t variant = (ins >>  9) & 0b11;    // 2 bit op code variant
-
-#if 0
-    // storing instructions
-    if(opcode == 0b01100) { // str (imm)
-      uint32_t a =  ramshim::iaddr(ins, 4, stack);
-      uint32_t *t = ramshim::srctar(ins, stack);
-      //printf("str (imm) 0x%08x\n", a);
-      // printf("str (imm): ");
-      ramshim::_cache.u32(a, *t);
-
-      pc++; return;
-    }
-
-    if(opcode == 0b01010 && variant != 0b11) { // str/strh/strb (reg)
-      uint32_t  a =  ramshim::raddr(ins, stack);
-      if(variant == 0b00) {                             // str
-        uint32_t *t = ramshim::srctar(ins, stack);
-        // printf("str (reg): ");
-        ramshim::_cache.u32(a, *t);
-      } else if(variant == 0b01) {                      // strh
-        uint16_t *t = (uint16_t *)ramshim::srctar(ins, stack);
-        // printf("strh (reg): ");
-        ramshim::_cache.u16(a, *t);
-      } else if(variant == 0b10) {                      // strb
-        uint8_t  *t = (uint8_t  *)ramshim::srctar(ins, stack);
-        // printf("strb (reg): ");
-        ramshim::_cache.u8(a, *t);
-      }
-      pc++; return;
-    }
-
-    if(opcode == 0b01110) { // strb (imm)
-      uint32_t a =  ramshim::iaddr(ins, 4, stack);
-      uint8_t *t = (uint8_t *)ramshim::srctar(ins, stack);
-      // printf("strb (imm): 0x%08x", a);
-      ramshim::_cache.u8(a, *t);
-      pc++; return;
-    }
-
-    if(opcode == 0b10000) { // strh (imm)
-      uint32_t  a =  ramshim::iaddr(ins, 4, stack);
-      uint16_t *t = (uint16_t *)ramshim::srctar(ins, stack);
-      // printf("strh (imm): ");
-      ramshim::_cache.u16(a, *t);
-      pc++; return;
-    }
-
-    if(opcode == 0b11000) { // stm
-      // used by memset
-      uint32_t  a = ramshim::iaddr(ins, 4, stack);
-      uint32_t *t = ramshim::srctar(ins, stack);
-
-      ramshim::_cache.u32(a, *t);
-
-      pc++; return;
-    }
-#endif
-    // loading instructions
-
-#if 0
-    if(opcode == 0b01001) { // ldr (lit)
-      __breakpoint();
-      uint32_t  a = (stack[ramshim::PC] & ~3u) + (ins & 0xFF);
-      uint32_t *t = &stack[ramshim::stack_index((ins >> 8) & 0b111)];
-
-      // printf("LDR (imm) %#010x > %#010x\n", a, *t);
-      *t = ramshim::_cache.u32(a);
-
-      pc++; return;
-    }
-#endif
-
-    if(opcode == 0b01010 && variant == 0b11) { // ldrsb (reg)
+    if(variant == 0b11) { // ldrsb (reg)
       uint32_t a =  ramshim::raddr(ins, stack);
       if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
 
       int32_t *t = (int32_t *)ramshim::srctar(ins, stack);
       // printf("ldrsb (reg): ");
       *t = ramshim::_cache.s8(a);
-      pc++; return;
-    }
-
-    if(opcode == 0b01011) { // ldr/ldrb/ldrh/ldrsh (reg)
-      uint32_t  a =  ramshim::raddr(ins, stack);
-      if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
-
-      uint32_t *t = ramshim::srctar(ins, stack);
-      if(variant == 0b00) {                             // ldr
-        //uint32_t *t = (uint32_t *)ramshim::srctar(ins, stack);
-        //printf("ldr (reg): ");
-        *t = ramshim::_cache.u32(a);
-      } else if(variant == 0b01) {                      // ldrh
-        //uint16_t *t = (uint16_t *)ramshim::srctar(ins, stack);
-        // printf("ldrh (reg): ");
-        *t = ramshim::_cache.u16(a);
-      } else if(variant == 0b10) {                      // ldrb
-        //uint8_t *t = (uint8_t *)ramshim::srctar(ins, stack);
-        // printf("ldrb (reg): ");
-        *t = ramshim::_cache.u8(a);
-      } else if(variant == 0b11) {                      // ldrsh
-        int32_t *t = (int32_t *)ramshim::srctar(ins, stack);
-        // printf("ldrsh (reg): ");
-        *t = ramshim::_cache.s16(a);
-      }
-      pc++; return;
-    }
-
-    if(opcode == 0b01101) { // ldr (imm)
-      uint32_t  a =  ramshim::iaddr(ins, 4, stack);
-      if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
-
-      uint32_t *t = ramshim::srctar(ins, stack);
-      //printf("ldr (imm) 0x%08x\n", a);
-      *t = ramshim::_cache.u32(a);
-      pc++; return;
-    }
-
-    if(opcode == 0b10001) { // ldrh (imm)
-      uint32_t a = ramshim::iaddr(ins, 2, stack);
-      if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
-
-      uint32_t *t = ramshim::srctar(ins, stack);
-      // printf("ldrh (imm): ");
-      *t = ramshim::_cache.u16(a);
-      pc++; return;
-    }
-
-    if(opcode == 0b01111) { // ldrb (imm)
-      uint32_t  a =  ramshim::iaddr(ins, 1, stack);
-      if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
-
-      uint32_t *t = ramshim::srctar(ins, stack);
-      // printf("ldrb (imm): 0x%08x", a);
-      *t = ramshim::_cache.u8(a);
-      pc++; return;
-    }
-
-    if(opcode == 0b11001) { // ldm
-      // TODO: Could do a longer read from cache.
-      uint32_t addr_reg = (ins >> 8) & 0b111;
-      uint32_t  a = stack[ramshim::stack_index(addr_reg)];
-      if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
-
-      uint32_t regs = ins & 0xFF;
-      bool wback = !(regs & (1 << addr_reg));
-      for (uint8_t i = 0; regs; ++i, regs >>= 1) {
-        if (regs & 1) {
-          uint32_t *t = &stack[ramshim::stack_index(i)];
-          *t = ramshim::_cache.u32(a);
-          a += 4;
-        }
-      }
-
-      if (wback) {
-        uint32_t *t = &stack[ramshim::stack_index(addr_reg)];
-        *t = a;
-      }
-
-      pc++; return;
+      stack[ramshim::PC] += 2; return;
     }
 
     __breakpoint();
   }
 
+  void __not_in_flash_func(hard_fault_ldr_reg)(uint32_t *stack, const uint16_t ins)
+  {
+    //const uint16_t *&pc = reinterpret_cast<const uint16_t*&>(stack[ramshim::PC]);
+    //const uint16_t ins = *pc;
+    const uint8_t variant = (ins >>  9) & 0b11;    // 2 bit op code variant
+
+    uint32_t  a =  ramshim::raddr(ins, stack);
+    if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
+
+    uint32_t *t = ramshim::srctar(ins, stack);
+    if(variant == 0b00) {                             // ldr
+      //printf("ldr (reg): ");
+      *t = ramshim::_cache.u32(a);
+    } else if(variant == 0b01) {                      // ldrh
+      // printf("ldrh (reg): ");
+      *t = ramshim::_cache.u16(a);
+    } else if(variant == 0b10) {                      // ldrb
+      // printf("ldrb (reg): ");
+      *t = ramshim::_cache.u8(a);
+    } else if(variant == 0b11) {                      // ldrsh
+      int32_t *t = (int32_t *)ramshim::srctar(ins, stack);
+      // printf("ldrsh (reg): ");
+      *t = ramshim::_cache.s16(a);
+    }
+
+    stack[ramshim::PC] += 2;
+  }
+
+  void __not_in_flash_func(hard_fault_ldr_imm)(uint32_t *stack, const uint16_t ins)
+  {
+    uint32_t  a =  ramshim::iaddr(ins, 4, stack);
+    if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
+
+    uint32_t *t = ramshim::srctar(ins, stack);
+    //printf("ldr (imm) 0x%08x\n", a);
+    *t = ramshim::_cache.u32(a);
+    stack[ramshim::PC] += 2;
+  }
+
+  void __not_in_flash_func(hard_fault_ldrh_imm)(uint32_t *stack, const uint16_t ins)
+  {
+    uint32_t  a =  ramshim::iaddr(ins, 2, stack);
+    if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
+
+    uint32_t *t = ramshim::srctar(ins, stack);
+    //printf("ldr (imm) 0x%08x\n", a);
+    *t = ramshim::_cache.u16(a);
+    stack[ramshim::PC] += 2;
+  }
+
+  void __not_in_flash_func(hard_fault_ldrb_imm)(uint32_t *stack, const uint16_t ins)
+  {
+    uint32_t  a =  ramshim::iaddr(ins, 1, stack);
+    if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
+
+    uint32_t *t = ramshim::srctar(ins, stack);
+    //printf("ldr (imm) 0x%08x\n", a);
+    *t = ramshim::_cache.u8(a);
+    stack[ramshim::PC] += 2;
+  }
+
+  void __not_in_flash_func(hard_fault_ldm)(uint32_t *stack, const uint16_t ins)
+  {
+    uint32_t addr_reg = (ins >> 8) & 0b111;
+    uint32_t  a = stack[ramshim::stack_index(addr_reg)];
+    if ((a & 0x2f800000) != 0x2f000000) __breakpoint();
+
+    uint32_t regs = ins & 0xFF;
+    bool wback = !(regs & (1 << addr_reg));
+    for (uint8_t i = 0; regs; ++i, regs >>= 1) {
+      if (regs & 1) {
+        uint32_t *t = &stack[ramshim::stack_index(i)];
+        *t = ramshim::_cache.u32(a);
+        a += 4;
+      }
+    }
+
+    if (wback) {
+      uint32_t *t = &stack[ramshim::stack_index(addr_reg)];
+      *t = a;
+    }
+
+    stack[ramshim::PC] += 2;
+  }
+
+  typedef void (*handler_func)(uint32_t *stack, const uint16_t ins);
+  handler_func handler_funcs[] = {
+    hard_fault_ldrsb,    // 10 = 01010
+    hard_fault_ldr_reg,  // 11 = 01011
+    nullptr,
+    hard_fault_ldr_imm,  // 13 = 01101
+    nullptr,
+    hard_fault_ldrb_imm, // 15 - 01111
+    nullptr,
+    hard_fault_ldrh_imm, // 17 = 10001
+    nullptr,             // 18
+    nullptr,             // 19
+    nullptr,             // 20
+    nullptr,             // 21
+    nullptr,             // 22
+    nullptr,             // 23
+    nullptr,             // 24
+    hard_fault_ldm,      // 25 = 11001
+  };
+
+#if 0
+  void __not_in_flash_func(hard_fault_handler_c)(uint32_t *stack)
+  {
+    const uint16_t *&pc = reinterpret_cast<const uint16_t*&>(stack[ramshim::PC]);
+    const uint16_t ins = *pc;
+    const uint8_t opcode  = (ins >> 11) & 0b11111; // 5 bit op code
+
+    handler_funcs[opcode - 10](stack, ins);
+  }
+#endif
 }
