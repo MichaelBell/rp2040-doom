@@ -16,6 +16,11 @@ This chocolate-doom commit that the code is branched off can be found in the `up
 
 The original Chocolate Doom README is [here](README-chocolate.md).
 
+# PicoVision Doom Quickstart
+
+Grab a [PicoVision](https://shop.pimoroni.com/products/picovision), put the doom1.whx file in the root directory of an SD card and insert that in the PicoVision.
+Build doom_tiny_usb (more details [below](#rp2040-doom-builds)), load it onto the PicoVision, and away you go!
+
 ## Code State
 
 Thus far, the focus has been entirely on getting RP2040 Doom running. Not a lot of time has been 
@@ -52,9 +57,7 @@ The main goals for this port were:
 
 ## Results
 
-[![RP2040 Doom on a Raspberry Pi Pico](https://img.youtube.com/vi/eDVazQVycP4/maxresdefault.jpg)](https://youtu.be/eDVazQVycP4)
-
-Features:
+PicoVision version features:
 
 * Full `DOOM1.WAD` playable.
 * *Ultimate Doom* and *Doom II* should be playable (not yet tested).
@@ -98,11 +101,10 @@ You must have [pico-sdk](https://github.com/raspberrypi/pico-sdk) and
 **the latest version of** [pico-extras](https://github.com/raspberrypi/pico-extras) installed, along with the regular 
 pico-sdk requisites (e.g.
 `arm-none-eabi-gcc`). If in doubt, see the Raspberry Pi
-[documentation](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf). I have been building against 
-the `develop` branch of `pico-sdk`, so I recommend that..
+[documentation](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf).
 
-**NOTE: I was building with arm-none-eabi-gcc 9.2.1 .. it seems like other versions may cause problems with binary 
-size, so stick with that for now.** 
+**NOTE: I have been testing with arm-none-eabi-gcc 9.3.1 .. it seems like other versions may cause problems with binary 
+size, so use [gcc 9](https://developer.arm.com/downloads/-/gnu-rm) for now.** 
 
 For USB keyboard input support, RP2040 Doom currently uses a modified version of TinyUSB included as a submodule. 
 Make sure you have initialized this submodule via `git submodule update --init` 
@@ -112,7 +114,7 @@ You can create a build directly like this:
 ```bash
 mkdir rp2040-build
 cd rp2040-build
-cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DPICO_BOARD=pimoroni_picovision -DPICO_SDK_PATH=/path/to/pico-sdk -DPICO_EXTRAS_PATH=/path/to/pico-extras -DCMAKE_C_COMPILER:FILEPATH=/path/to/gcc-arm-none-eabi-9-2020-q2-update/bin/arm-none-eabi-gcc -DCMAKE_CXX_COMPILER:FILEPATH=/path/to/gcc-arm-none-eabi-9-2020-q2-update/bin/arm-none-eabi-g++ ..
+cmake -DPICO_BOARD=pimoroni_picovision -DPICO_SDK_PATH=/path/to/pico-sdk -DPICO_EXTRAS_PATH=/path/to/pico-extras -DCMAKE_C_COMPILER:FILEPATH=/path/to/gcc-arm-none-eabi-9-2020-q2-update/bin/arm-none-eabi-gcc -DCMAKE_CXX_COMPILER:FILEPATH=/path/to/gcc-arm-none-eabi-9-2020-q2-update/bin/arm-none-eabi-g++ ..
 ```
 
 The Pimoroni Picovision board file is in this repo for now, copy it to `pico-sdk/src/boards/include/boards`.
@@ -176,7 +178,7 @@ cmake -DPICO_PLATFORM=host -DPICO_SDK_PATH=/path/to/pico-sdk -DPICO_EXTRAS_PATH=
 
 ## whd_gen
 
-`doom1.whx` is includd in this repository, otherwise you need to build `whd_gen` using the regular native build 
+`doom1.whx` is included in this repository, otherwise you need to build `whd_gen` using the regular native build 
 instructions above.
 
 To generate a WHX file (you must use this to convert DOOM1.WAD to run on a 2M Raspberry Pi Pico)
@@ -198,34 +200,6 @@ work, it is by no means guaranteed!
 
 NOTE: You should use a release build of `whd_gen` for the best sound effect fidelity, as the debug build 
 deliberately lowers the encoding quality for the sake of speed.
-
-# Running the RP2040 version
-
-The releases here use pins as defined when building with `PICO_BOARD=vgaboard`:
-
-```
- 0-4:    Red 0-4
- 6-10:   Green 0-4
- 11-15:  Blue 0-4
- 16:     HSync
- 17:     VSync
- 18:     I2C1 SDA
- 19:     I2C1 SCL
- 20:     UART1 TX
- 21:     UART1 RX
- 26:     I2S DIN
- 27:     I2S BCK
- 28:     I2S LRCK
-```
-You can always find these from your ELF or UF2 with 
-
-```
-picotool info -a <filename>
-``` 
-
-These match for example the Pimoroni Pico VGA Demo Base which itself is based on the suggested 
-Raspberry Pi Documentation [here](https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf)
-and the design files zipped [here](https://datasheets.raspberrypi.com/rp2040/VGA-KiCAD.zip).
 
 # Future
 

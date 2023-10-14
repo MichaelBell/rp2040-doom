@@ -566,7 +566,7 @@ function(add_doom_tiny SUFFIX RENDER_LIB)
         PICO_DEBUG_MALLOC=1
         EMU8950_NO_RATECONV=1
 
-        PICO_CORE1_STACK_SIZE=0x4f8
+        PICO_CORE1_STACK_SIZE=0x700 # Not sure of exact value required, but this at least prevents broken build on gcc 10!
 
         NO_IERROR=1
     )
