@@ -1,15 +1,16 @@
-#include "qspi-psram-cache.hpp"
-
-
-
 namespace ramshim {
 
   volatile uint32_t faults = 0;
   constexpr uint32_t _ram_start         = 0x2f000000;
   constexpr uint32_t _ram_size          =   0x800000;
   constexpr uint32_t _ram_end           = _ram_start + _ram_size;
+}
 
-  ramshim::cache_t _cache(_ram_start);
+#include "qspi-psram-cache.hpp"
+
+namespace ramshim {
+
+  ramshim::cache_t _cache;
 
   enum stack_offsets : int8_t {
     // values we added to the stack
@@ -117,6 +118,9 @@ extern "C"
 
   void __not_in_flash_func(hard_fault_ldrsb)(uint32_t *stack, const uint16_t ins)
   {
+    // Force the compiler to push r4-r7 onto the stack
+    //asm("" : : : "r4", "r5", "r6", "r7" );
+
     const uint8_t variant = (ins >>  9) & 0b11;    // 2 bit op code variant
     if(variant == 0b11) { // ldrsb (reg)
       uint32_t a =  ramshim::raddr(ins, stack);
@@ -135,8 +139,9 @@ extern "C"
 
   void __not_in_flash_func(hard_fault_ldr_reg)(uint32_t *stack, const uint16_t ins)
   {
-    //const uint16_t *&pc = reinterpret_cast<const uint16_t*&>(stack[ramshim::PC]);
-    //const uint16_t ins = *pc;
+    // Force the compiler to push r4-r7 onto the stack
+    //asm("" : : : "r4", "r5", "r6", "r7" );
+
     const uint8_t variant = (ins >>  9) & 0b11;    // 2 bit op code variant
 
     uint32_t  a =  ramshim::raddr(ins, stack);
@@ -163,6 +168,9 @@ extern "C"
 
   void __not_in_flash_func(hard_fault_ldr_imm)(uint32_t *stack, const uint16_t ins)
   {
+    // Force the compiler to push r4-r7 onto the stack
+    //asm("" : : : "r4", "r5", "r6", "r7" );
+
     uint32_t  a =  ramshim::iaddr(ins, 4, stack);
     if ((a & 0xff800000) != 0x2f000000) __breakpoint();
 
@@ -175,6 +183,9 @@ extern "C"
 
   void __not_in_flash_func(hard_fault_ldrh_imm)(uint32_t *stack, const uint16_t ins)
   {
+    // Force the compiler to push r4-r7 onto the stack
+    //asm("" : : : "r4", "r5", "r6", "r7" );
+
     uint32_t  a =  ramshim::iaddr(ins, 2, stack);
     if ((a & 0xff800000) != 0x2f000000) __breakpoint();
 
@@ -187,6 +198,9 @@ extern "C"
 
   void __not_in_flash_func(hard_fault_ldrb_imm)(uint32_t *stack, const uint16_t ins)
   {
+    // Force the compiler to push r4-r7 onto the stack
+    //asm("" : : : "r4", "r5", "r6", "r7" );
+
     uint32_t  a =  ramshim::iaddr(ins, 1, stack);
     if ((a & 0xff800000) != 0x2f000000) __breakpoint();
 
@@ -199,6 +213,9 @@ extern "C"
 
   void __not_in_flash_func(hard_fault_ldm)(uint32_t *stack, const uint16_t ins)
   {
+    // Force the compiler to push r4-r7 onto the stack
+    //asm("" : : : "r4", "r5", "r6", "r7" );
+
     uint32_t addr_reg = (ins >> 8) & 0b111;
     uint32_t  a = stack[ramshim::stack_index(addr_reg)];
     if ((a & 0xff800000) != 0x2f000000) __breakpoint();
