@@ -2645,6 +2645,9 @@ void P_UnArchiveSpecials (void)
 #include "picodoom.h"
 
 const uint8_t *get_end_of_flash(void) {
+#if PICOVISION
+    return (uint8_t*)(XIP_BASE + 0x100000);
+#else
     static const uint8_t *end_of_flash;
     if (!end_of_flash) {
         // look for end of flash by repeated data
@@ -2656,12 +2659,17 @@ const uint8_t *get_end_of_flash(void) {
 //        printf("FLASH SPACE %p -> %p\n", whd_map_base + whdheader->size, end_of_flash);
     }
     return end_of_flash;
+#endif
 }
 
 void P_SaveGameGetExistingFlashSlotAddresses(flash_slot_info_t *slots, int count) {
     const uint8_t *index = get_end_of_flash() - 4;
     int i;
+#if PICOVISION
+    const uint8_t *limit = (uint8_t*)(XIP_BASE + 0x0c0000);
+#else
     const uint8_t *limit = whd_map_base + whdheader->size;
+#endif
     for(i=0;i<count;i++) {
         bool ok = false;
         if (index[0] == 0x53 && index[1] >= i && index[1] < count) {
@@ -2757,7 +2765,11 @@ boolean __noinline P_SaveGameWriteFlashSlot(int slot, const uint8_t *buffer, uin
             last_slot = i;
         }
     }
+#if PICOVISION
+    const uint8_t *limit = (uint8_t*)(XIP_BASE + 0x0c0000);
+#else
     const uint8_t *limit = whd_map_base + whdheader->size;
+#endif
     int freespace = (get_end_of_flash() - limit) - used;
 //    printf("SPACE %d, required %d\n", freespace, size + SLOT_OVERHEAD);
     if (freespace < size + SLOT_OVERHEAD) {

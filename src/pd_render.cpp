@@ -2784,6 +2784,9 @@ void pd_end_frame(int wipe_start) {
     }
 #endif
     sem_release(&core0_done);
+    while (!sem_available(&core1_done)) {
+        I_UpdateSound();
+    }
     sem_acquire_blocking(&core1_done);
     draw_fuzz_columns();
     DEBUG_PINS_CLR(full_render, 1);

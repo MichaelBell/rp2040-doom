@@ -109,6 +109,8 @@ namespace pimoroni {
         // User code must setup a handler for the DMA, but by default the channel is set
         // to quiet moe so does not trigger.
         dma_channel_set_irq0_enabled(dma_channel, true);
+
+        critical_section_init(&mutex);
     }
 
     void APS6404::init() {
@@ -283,7 +285,8 @@ namespace pimoroni {
         }
     }
 
-    void APS6404::write_fast_irq(uint32_t addr, uint32_t* data, uint32_t len_in_bytes) {
+    void __not_in_flash_func(APS6404::write_fast_irq)(uint32_t addr, uint32_t* data, uint32_t len_in_bytes) {
+        critical_section_enter_blocking(&mutex);
         if (!last_cmd_was_write) {
             last_cmd_was_write = true;
             dma_channel_wait_for_finish_blocking(dma_channel);
@@ -300,6 +303,7 @@ namespace pimoroni {
         pio_sm_put_blocking(pio, pio_sm, pio_offset + sram_offset_do_write);
 
         dma_channel_transfer_from_buffer_now(dma_channel, data, (len_in_bytes >> 2) + 1);
+        critical_section_exit(&mutex);
     }
 
     void APS6404::write_repeat(uint32_t addr, uint32_t data, uint32_t len_in_bytes) {
@@ -363,6 +367,26 @@ namespace pimoroni {
             uint32_t* cmd_buf = add_read_to_cmd_buffer(multi_read_cmd_buffer, addr, len_in_words);
             dma_channel_transfer_from_buffer_now(read_cmd_dma_channel, multi_read_cmd_buffer, cmd_buf - multi_read_cmd_buffer);
         }
+    }
+
+    void __not_in_flash_func(APS6404::read_fast_blocking)(uint32_t addr, uint32_t* read_buf, uint32_t len_in_words) {
+        critical_section_enter_blocking(&mutex);
+        last_cmd_was_write = false;
+        wait_for_finish_blocking();
+
+        dma_channel_configure(
+            dma_channel, &read_config,
+            read_buf,
+            &pio->rxf[pio_sm],
+            len_in_words,
+            true
+        );
+
+        pio_sm_put_blocking(pio, pio_sm, (len_in_words * 8) - 4);
+        pio_sm_put_blocking(pio, pio_sm, 0xeb000000u | addr);
+        pio_sm_put_blocking(pio, pio_sm, pio_offset + sram_offset_do_read);
+        wait_for_finish_blocking();
+        critical_section_exit(&mutex);
     }
 
     void APS6404::multi_read(uint32_t* addresses, uint32_t* lengths, uint32_t num_reads, uint32_t* read_buf, int chain_channel) {

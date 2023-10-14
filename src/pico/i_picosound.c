@@ -35,6 +35,7 @@
 #include "pico/audio_i2s.h"
 #include "pico/binary_info.h"
 #include "hardware/gpio.h"
+#include "pico/sync.h"
 
 #define ADPCM_BLOCK_SIZE 128
 #define ADPCM_SAMPLES_PER_BLOCK_SIZE 249
@@ -77,6 +78,8 @@ static struct audio_buffer_format producer_format = {
         .format = &audio_format,
         .sample_stride = 4
 };
+
+semaphore_t sound_update;
 
 // ====== FROM ADPCM-LIB =====
 #define CLIP(data, min, max) \
@@ -331,11 +334,15 @@ static void I_Pico_UpdateSound(void)
 {
     if (!sound_initialized) return;
 
+    if (!sem_try_acquire(&sound_update)) return;
+
     // todo note this is called from D_Main around the game loop, which is fast enough now but may not be.
     //  we can either poll more frequently, or use IRQ but then we have to be careful with threading (both OPL and channels)
     // todo hopefully at least we can run the AI fast enough.
     audio_buffer_t *buffer = take_audio_buffer(producer_pool, false);
-    if (buffer) {
+    while (buffer) {
+        //if (buffer->buffer->size != 0x1000) __breakpoint();
+        //if ((uintptr_t)buffer->buffer->bytes & 3) __breakpoint();
         if (music_generator) {
             // todo think about volume; this already has a (<< 3) in it
             music_generator(buffer);
@@ -403,7 +410,10 @@ static void I_Pico_UpdateSound(void)
             }
         }
         give_audio_buffer(producer_pool, buffer);
+        buffer = take_audio_buffer(producer_pool, false);
     }
+
+    sem_release(&sound_update);
 }
 
 static void I_Pico_ShutdownSound(void)
@@ -420,8 +430,11 @@ static boolean I_Pico_InitSound(boolean _use_sfx_prefix)
     int i;
     use_sfx_prefix = _use_sfx_prefix;
 
+    sem_init(&sound_update, 1, 1);
+
     // todo this will likely need adjustment - maybe with IRQs/double buffer & pull from audio we can make it quite small
-    producer_pool = audio_new_producer_pool(&producer_format, 2, 1024); // todo correct size
+    // Mike: This seems to be working well now there is locking
+    producer_pool = audio_new_producer_pool(&producer_format, 4, 512);
 
     struct audio_i2s_config config = {
             .data_pin = PICO_AUDIO_I2S_DATA_PIN,

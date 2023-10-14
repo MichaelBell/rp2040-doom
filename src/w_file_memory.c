@@ -66,8 +66,12 @@ static const wad_file_t fileo = {
         .path = "<here>",
 };
 
+void picovision_wxd_init();
+
 static wad_file_t *W_Memory_OpenFile(const char *path)
 {
+    picovision_wxd_init();
+
 #if !USE_WHD
     if (fileo.mapped[0] != 'I' || fileo.mapped[1] != 'W' || fileo.mapped[2] != 'A' || fileo.mapped[3] != 'D')
         panic("NO WAD");

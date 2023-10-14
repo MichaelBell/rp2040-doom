@@ -9,9 +9,21 @@ extern "C" {
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
 
+#include "swd_load.hpp"
+#include "pico-stick.h"
+
 #include "aps6404.hpp"
 
 pimoroni::APS6404 ram;
+
+#include "hard-fault-handler.hpp"
+
+#include "ff.h"
+static FATFS fs;
+static FIL fil;
+
+#define BUFFER_BYTES 320*168
+extern uint8_t frame_buffer[2][BUFFER_BYTES];
 
 #define BASE_ADDRESS 0x10000
 
@@ -52,19 +64,35 @@ static constexpr uint I2C_REG_SCROLL_BASE = 0xE0;
 static uint8_t bank = 0;
 
   static volatile bool enable_switch_on_vsync = false;
+  static volatile bool enable_notify_on_vsync = false;
 
 // Used to re-trigger scanline fill
 #define LOW_PRIO_IRQ 31
 
-  static void vsync_callback() {
+  static void __not_in_flash_func(vsync_callback)() {
     if (gpio_get_irq_event_mask(VSYNC) & GPIO_IRQ_EDGE_RISE) {
-      gpio_acknowledge_irq(VSYNC, GPIO_IRQ_EDGE_RISE);
+      //gpio_acknowledge_irq(VSYNC, GPIO_IRQ_EDGE_RISE);  <-- Can't use as in flash
+      iobank0_hw->intr[VSYNC / 8] = GPIO_IRQ_EDGE_RISE << (4 * (VSYNC % 8));
 
       if (enable_switch_on_vsync) {
         // Toggle RAM_SEL pin
+        critical_section_enter_blocking(&ram.mutex);
+        ram.wait_for_finish_blocking();
         gpio_xor_mask(1 << RAM_SEL);
-        enable_switch_on_vsync = false;
 
+        enable_switch_on_vsync = false;
+        enable_notify_on_vsync = false;
+        *((io_rw_32 *) (PPB_BASE + M0PLUS_NVIC_ISPR_OFFSET)) = 1u << LOW_PRIO_IRQ;
+
+        // Give the RAM MUX a chance to stabilize
+        for (int i = 0; i < 10; ++i) {
+          asm volatile("nop\nnop\nnop\nnop\n");
+        }
+
+        critical_section_exit(&ram.mutex);
+      }
+      else if (enable_notify_on_vsync) {
+        enable_notify_on_vsync = false;
         *((io_rw_32 *) (PPB_BASE + M0PLUS_NVIC_ISPR_OFFSET)) = 1u << LOW_PRIO_IRQ;
       }
     }
@@ -106,8 +134,45 @@ void write_header()
     ram.write_repeat(BASE_ADDRESS - 40, 0, display_height * 1024);
 }
 
-void picovision_init()
+void read_wxd()
 {
+#if WHD_SUPER_TINY
+    FRESULT fr = f_open(&fil, "/doom1.whx", FA_READ);
+#else
+    FRESULT fr = f_open(&fil, "/doom1.whd", FA_READ);
+#endif
+    if (fr != FR_OK) {
+        printf("Failed to open WHX file, error: %d\n", fr);
+        return;
+    }
+
+    uint32_t addr = TINY_WAD_ADDR & 0x7FFC00;
+    uint8_t* buffer = frame_buffer[0];
+    size_t bytes_read;
+    do {
+      fr = f_read(&fil, buffer, 1024, &bytes_read);
+      if (fr != FR_OK) {
+          printf("Failed to read data, error: %d\n", fr);
+      }
+      if (bytes_read > 0) {
+        ram.write(addr, (uint32_t*)buffer, bytes_read);
+        addr += bytes_read;
+      }
+    } while (bytes_read == 1024);
+
+    f_close(&fil);
+}
+
+void picovision_wxd_init()
+{
+    swd_load_program(section_addresses, section_data, section_data_len, sizeof(section_addresses) / sizeof(section_addresses[0]), 0x20000001, 0x15004000, true);
+
+    FRESULT fr = f_mount(&fs, "", 1);
+    if (fr != FR_OK) {
+      printf("Failed to mount SD card, error: %d\n", fr);
+      return;
+    }
+
     gpio_init(RAM_SEL);
     gpio_put(RAM_SEL, 0);
     gpio_set_dir(RAM_SEL, GPIO_OUT);
@@ -115,6 +180,32 @@ void picovision_init()
     gpio_init(VSYNC);
     gpio_set_dir(VSYNC, GPIO_IN);
 
+    gpio_put(RAM_SEL, 0);
+    ram.init();
+    bank = 0;
+    write_header();
+    read_wxd();
+    sleep_us(100);
+
+    gpio_put(RAM_SEL, 1);
+    ram.init();
+    bank = 1;
+    write_header();
+    read_wxd();
+    sleep_us(100);
+
+    bank = 0;
+    gpio_put(RAM_SEL, 0);
+    sleep_us(100);
+}
+
+void picovision_wxd_read()
+{
+
+}
+
+void picovision_init()
+{
     gpio_set_irq_enabled(VSYNC, GPIO_IRQ_EDGE_RISE, true);
     irq_set_exclusive_handler(IO_IRQ_BANK0, vsync_callback);
     irq_set_enabled(IO_IRQ_BANK0, true);
@@ -122,22 +213,6 @@ void picovision_init()
     i2c_init(i2c1, 400000);
     gpio_set_function(I2C_SDA, GPIO_FUNC_I2C); gpio_pull_up(I2C_SDA);
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C); gpio_pull_up(I2C_SCL);
-
-    gpio_put(RAM_SEL, 0);
-    ram.init();
-    bank = 0;
-    write_header();
-    sleep_us(100);
-
-    gpio_put(RAM_SEL, 1);
-    ram.init();
-    bank = 1;
-    write_header();
-    sleep_us(100);
-
-    bank = 0;
-    gpio_put(RAM_SEL, 0);
-    sleep_us(100);
 
     //mp_printf(&mp_plat_print, "Start I2C\n");
 
@@ -152,7 +227,7 @@ void picovision_init()
     }
 }
 
-void picovision_write_line(int y, uint32_t* data)
+void __not_in_flash_func(picovision_write_line)(int y, uint32_t* data)
 {
     // TODO
     #if 0
@@ -166,7 +241,7 @@ void picovision_write_line(int y, uint32_t* data)
     ram.write_fast_irq(addr, data, 320*2);
 }
 
-void picovision_flip()
+void __not_in_flash_func(picovision_flip)()
 {
     bank ^= 1;
     ram.wait_for_finish_blocking();
@@ -178,7 +253,12 @@ void picovision_flip()
     //gpio_xor_mask(1 << RAM_SEL);    
 }
 
-void picovision_ack_dma()
+void __not_in_flash_func(picovision_notify_next_vsync)()
+{
+  enable_notify_on_vsync = true;
+}
+
+void __not_in_flash_func(picovision_ack_dma)()
 {
     ram.ack_dma_irq();
 }

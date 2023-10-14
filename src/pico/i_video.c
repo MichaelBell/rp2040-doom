@@ -17,14 +17,6 @@
 //	DOOM graphics stuff for Pico.
 //
 
-#ifndef PICO_ON_DEVICE
-#define PICO_ON_DEVICE 1
-#endif
-
-#ifndef PICOVISION
-#define PICOVISION 1
-#endif
-
 #if 1 //PICODOOM_RENDER_NEWHOPE
 #include <stdio.h>
 #include <string.h>
@@ -575,7 +567,7 @@ static void __noinline render_text_mode_scanline(scanvideo_scanline_buffer_t *bu
 }
 #endif
 
-static void __scratch_x("scanlines") scanline_func_double(uint32_t *dest, int scanline) {
+static void __not_in_flash_func(scanline_func_double)(uint32_t *dest, int scanline) {
     if (scanline < MAIN_VIEWHEIGHT) {
         const uint8_t *src = frame_buffer[display_frame_index] + scanline * SCREENWIDTH;
 //        if (scanline == 100) {
@@ -789,7 +781,7 @@ static inline uint draw_vpatch(uint16_t *dest, patch_t *patch, vpatchlist_t *vp,
                         source -= 3;
                         i = (source - (const uint8_t *) data_cache);
                     }
-                    if (true) {
+                    if (false) {
                         //                        once = true;
                         xip_ctrl_hw->stream_ctr = 0;
                         // workaround yucky bug
@@ -968,9 +960,11 @@ void __noinline new_frame_init_overlays_palette_and_wipe() {
 }
 
 // this method moved out of scratchx because we didn't have quite enough space for core1 stack
-void __no_inline_not_in_flash_func(new_frame_stuff)() {
+bool __no_inline_not_in_flash_func(new_frame_stuff)() {
     // this part of the per frame code is in RAM as it is needed during save
-        if (sem_available(&render_frame_ready)) {
+    bool frame_ready = false;
+    if (sem_available(&render_frame_ready)) {
+        frame_ready = true;
         sem_acquire_blocking(&render_frame_ready);
         display_video_type = next_video_type;
         display_frame_index = next_frame_index;
@@ -979,15 +973,17 @@ void __no_inline_not_in_flash_func(new_frame_stuff)() {
         video_scroll = next_video_scroll; // todo does this waste too much space
 #endif
         sem_release(&display_frame_freed);
-            } else {
+    } else {
 #if !DEMO1_ONLY
         video_scroll = NULL;
 #endif
     }
-    if (display_video_type != VIDEO_TYPE_SAVING) {
-        // this stuff is large (so in flash) and not needed in save move
+    if (display_video_type != VIDEO_TYPE_SAVING && frame_ready) {
+        // this stuff is large (so in flash) and not needed in save mode
         new_frame_init_overlays_palette_and_wipe();
     }
+
+    return frame_ready;
 }
 
 #if PICOVISION
@@ -996,6 +992,7 @@ static int16_t picovision_last_scanline = SCREENHEIGHT-1;
 #endif
 
 void __scratch_x("scanlines") fill_scanlines() {
+//void __no_inline_not_in_flash_func(fill_scanlines)() {
 #if USE_INTERP
     need_save = interp_in_use;
     interp_updated = 0;
@@ -1037,8 +1034,12 @@ void __scratch_x("scanlines") fill_scanlines() {
         int scanline = picovision_last_scanline;
 #endif
         if ((int8_t) frame != last_frame_number) {
+            if (!new_frame_stuff() || display_video_type == VIDEO_TYPE_SAVING) {
+                picovision_last_scanline = -1;
+                picovision_notify_next_vsync();
+                return;
+            }
             last_frame_number = frame;
-            new_frame_stuff();
         }
 
 #if PICOVISION

@@ -9,6 +9,7 @@ target_sources(common_pico INTERFACE
         ${CMAKE_CURRENT_LIST_DIR}/stubs.c
 
         ${CMAKE_CURRENT_LIST_DIR}/picovision/aps6404.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/picovision/swd_load.cpp
         ${CMAKE_CURRENT_LIST_DIR}/picovision/picovision.cpp
 
         ${CMAKE_CURRENT_LIST_DIR}/i_picosound.c
@@ -37,11 +38,21 @@ target_compile_definitions(common_pico INTERFACE
         NO_USE_MOUSE=1
         PICO_AUDIO_I2S_PIO=1
         PICO_AUDIO_I2S_DMA_IRQ=1
+        SDCARD_SPI_BUS=spi1
+        SDCARD_PIN_SPI0_CS=15
+        SDCARD_PIN_SPI0_SCK=10
+        SDCARD_PIN_SPI0_MOSI=11
+        SDCARD_PIN_SPI0_MISO=12        
         )
 
 pico_generate_pio_header(common_pico ${CMAKE_CURRENT_LIST_DIR}/video_doom.pio)
 pico_generate_pio_header(common_pico ${CMAKE_CURRENT_LIST_DIR}/picovision/aps6404.pio)
-target_link_libraries(common_pico INTERFACE pico_stdlib pico_multicore) #pico_scanvideo_dpi)
+pico_generate_pio_header(common_pico ${CMAKE_CURRENT_LIST_DIR}/picovision/swd.pio)
+
+include(${CMAKE_CURRENT_LIST_DIR}/picovision/fatfs/fatfs.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/picovision/sdcard/sdcard.cmake)
+
+target_link_libraries(common_pico INTERFACE pico_stdlib pico_multicore sdcard fatfs) #pico_scanvideo_dpi)
 
 add_library(pico_cd INTERFACE)
 if (TARGET tinyusb_host)

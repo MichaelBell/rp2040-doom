@@ -1,5 +1,6 @@
 if (PICO_SDK)
     set(BINARIES doom)
+    add_compile_options(-O2 -fgcse-after-reload -floop-interchange -fpeel-loops -fpredictive-commoning -fsplit-paths -ftree-loop-distribute-patterns -ftree-loop-distribution -ftree-vectorize -ftree-partial-pre -funswitch-loops)
 else()
     # comment out heretic/hexen/strife for now, as whilst they may build, how well they work is unclear
 #    set(BINARIES doom heretic hexen strife setup)
@@ -318,6 +319,8 @@ add_library(small_doom_common INTERFACE)
 target_link_libraries(small_doom_common INTERFACE adpcm-lib) # handy to have about
 
 target_compile_definitions(small_doom_common INTERFACE
+        PICOVISION=1
+
         SHRINK_MOBJ=1 # may break saved games
 
         DOOM_ONLY=1 # don't support hexxen etc.
@@ -563,7 +566,7 @@ function(add_doom_tiny SUFFIX RENDER_LIB)
         PICO_DEBUG_MALLOC=1
         EMU8950_NO_RATECONV=1
 
-        PICO_CORE1_STACK_SIZE=0x4f8
+        PICO_CORE1_STACK_SIZE=0x700 # Not sure of exact value required, but this at least prevents broken build on gcc 10!
 
         NO_IERROR=1
     )
@@ -633,14 +636,14 @@ if (PICO_SDK)
             NO_USE_FINALE_BUNNY=1
     )
     target_compile_definitions(doom_tiny PRIVATE
-            TINY_WAD_ADDR=0x10040000
+            TINY_WAD_ADDR=0x2f080000
     )
     target_link_libraries(doom_tiny PRIVATE tiny_settings)
     add_doom_tiny(_nost render_newhope)
 
     target_compile_definitions(doom_tiny_nost PRIVATE
             # NO_USE_FINALE_CAST=1 # note this is only used by doom II but doesnt take that much more space
-            TINY_WAD_ADDR=0x10048000
+            TINY_WAD_ADDR=0x2f080000
             )
     if (PICO_ON_DEVICE)
         suppress_tinyusb_warnings()
@@ -648,13 +651,13 @@ if (PICO_SDK)
         target_link_libraries(doom_tiny_usb PRIVATE tiny_settings pico_cd)
         target_compile_definitions(doom_tiny_usb PRIVATE
                 USB_SUPPORT=1
-                TINY_WAD_ADDR=0x10042000 # ugh tinyusb is >8K currently!!
+                TINY_WAD_ADDR=0x2f080000
         )
         add_doom_tiny(_nost_usb render_newhope)
         target_link_libraries(doom_tiny_nost_usb PRIVATE pico_cd)
         target_compile_definitions(doom_tiny_nost_usb PRIVATE
                 USB_SUPPORT=1
-                TINY_WAD_ADDR=0x10048000
+                TINY_WAD_ADDR=0x2f080000
                 )
     endif()
 endif()
