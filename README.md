@@ -2,10 +2,14 @@
 
 This is a port of Doom for RP2040 devices, derived from [Chocolate Doom](https://github.com/chocolate-doom/chocolate-doom).
 
-Significant changes have been made to support running on the RP2040 device, but particularly to support running the 
+This version for PicoVision is a work in progress, only made possible at all by kilograham's amazing work to get Doom running on
+RP2040 in the first place.  He made very substantial changes to support running the 
 entire shareware `DOOM1.WAD` which is 4M big on a Raspberry Pi Pico with only 2M flash!
 
-You can read many details on this port in the blog post [here](https://kilograham.github.io/rp2040-doom/).
+This version will run the shareware version, full Ultimate Doom and Doom 2 on the PicoVision hardware, by using the on board 8MB PSRAM
+to store the compressed WAD file loaded from an SD card.
+
+You can read many details on the original RP2040 port in the blog post [here](https://kilograham.github.io/rp2040-doom/).
 
 Note that a hopefully-fully-functional `chocolate-doom` executable is buildable from this RP2040 code base as a 
 means of 
@@ -16,7 +20,7 @@ This chocolate-doom commit that the code is branched off can be found in the `up
 
 The original Chocolate Doom README is [here](README-chocolate.md).
 
-# PicoVision Doom Quickstart
+## PicoVision Doom Quickstart
 
 Grab a [PicoVision](https://shop.pimoroni.com/products/picovision), put the doom1.whx file in the root directory of an SD card and insert that in the PicoVision.
 Build doom_tiny_usb (more details [below](#rp2040-doom-builds)), load it onto the PicoVision, and away you go!
@@ -45,7 +49,7 @@ Note you can always use `picotool info -a <UF2 file>` to see the pins used by a 
 
 ## Goals
 
-The main goals for this port were:
+The main goals for the RP2040 port were:
 
 1. Everything should match the original game experience, i.e. all the graphics at classic 320x200 resolution, stereo
    sound,
@@ -53,7 +57,7 @@ The main goals for this port were:
 2. `DOOM1.WAD` should run on a Raspberry Pi Pico. There was also to be no sneaky discarding of splash screens, altering of levels, down-sampling of
    textures or whatever. RP2040 boards with 8M should be able to play at least the full *Ultimate Doom* and *DOOM II*
    WADs.
-3. The RP2040 should output directly to VGA (16 color pins for RGB565 along with HSync/VSync) along with stereo sound.
+3. The RP2040 should output directly to VGA (16 color pins for RGB565 along with HSync/VSync - now replaced by digital video output) along with stereo sound
 
 ## Results
 
@@ -69,7 +73,7 @@ PicoVision version features:
 * Demos from original WADs run correctly.
 * USB Keyboard Input support.
 * All end scenes, intermissions, help screens etc. supported.
-* Mediocre frame rate; generally 12-15+ FPS.  This is a WIP.
+* Mediocre frame rate; generally 12-20 FPS.  This is a WIP.
 * Uses 270Mhz overclock (requires flash chip that will run at 135Mhz)
 
 # Building
