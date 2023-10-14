@@ -93,3 +93,14 @@ configure_file(src/setup/setup-manifest.xml.in src/setup/setup-manifest.xml)
 foreach(SUBDIR textscreen midiproc opl pcsound src)
     add_subdirectory("${SUBDIR}")
 endforeach()
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/src/doom_tiny_usb.uf2
+    ${CMAKE_CURRENT_BINARY_DIR}/src/doom_tiny_nost_usb.uf2
+    ${CMAKE_CURRENT_LIST_DIR}/README.md
+    DESTINATION .
+)
+
+set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
+set(CPACK_GENERATOR "ZIP" "TGZ")
+include(CPack)
