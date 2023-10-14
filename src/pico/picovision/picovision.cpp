@@ -71,7 +71,8 @@ static uint8_t bank = 0;
 
   static void __not_in_flash_func(vsync_callback)() {
     if (gpio_get_irq_event_mask(VSYNC) & GPIO_IRQ_EDGE_RISE) {
-      gpio_acknowledge_irq(VSYNC, GPIO_IRQ_EDGE_RISE);
+      //gpio_acknowledge_irq(VSYNC, GPIO_IRQ_EDGE_RISE);  <-- Can't use as in flash
+      iobank0_hw->intr[VSYNC / 8] = GPIO_IRQ_EDGE_RISE << (4 * (VSYNC % 8));
 
       if (enable_switch_on_vsync) {
         // Toggle RAM_SEL pin
@@ -83,6 +84,7 @@ static uint8_t bank = 0;
         enable_notify_on_vsync = false;
         *((io_rw_32 *) (PPB_BASE + M0PLUS_NVIC_ISPR_OFFSET)) = 1u << LOW_PRIO_IRQ;
 
+        // Give the RAM MUX a chance to stabilize
         for (int i = 0; i < 10; ++i) {
           asm volatile("nop\nnop\nnop\nnop\n");
         }
@@ -144,7 +146,7 @@ void read_wxd()
         return;
     }
 
-    uint32_t addr = 0x400000;
+    uint32_t addr = TINY_WAD_ADDR & 0x7FFC00;
     uint8_t* buffer = frame_buffer[0];
     size_t bytes_read;
     do {

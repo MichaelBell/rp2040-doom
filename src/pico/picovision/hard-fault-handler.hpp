@@ -164,11 +164,11 @@ extern "C"
     uint32_t  a =  ramshim::iaddr(ins, 4, stack);
     if ((a & 0xff800000) != 0x2f000000) __breakpoint();
 
+    stack[ramshim::PC] += 2;
+
     uint32_t *t = ramshim::srctar(ins, stack);
     //printf("ldr (imm) 0x%08x\n", a);
     *t = ramshim::_cache.u32(a);
-
-    stack[ramshim::PC] += 2;
   }
 
   void __not_in_flash_func(hard_fault_ldrh_imm)(uint32_t *stack, const uint16_t ins)
@@ -176,11 +176,11 @@ extern "C"
     uint32_t  a =  ramshim::iaddr(ins, 2, stack);
     if ((a & 0xff800000) != 0x2f000000) __breakpoint();
 
+    stack[ramshim::PC] += 2;
+
     uint32_t *t = ramshim::srctar(ins, stack);
     //printf("ldr (imm) 0x%08x\n", a);
     *t = ramshim::_cache.u16(a);
-
-    stack[ramshim::PC] += 2;
   }
 
   void __not_in_flash_func(hard_fault_ldrb_imm)(uint32_t *stack, const uint16_t ins)
@@ -188,11 +188,11 @@ extern "C"
     uint32_t  a =  ramshim::iaddr(ins, 1, stack);
     if ((a & 0xff800000) != 0x2f000000) __breakpoint();
 
+    stack[ramshim::PC] += 2;
+
     uint32_t *t = ramshim::srctar(ins, stack);
     //printf("ldr (imm) 0x%08x\n", a);
     *t = ramshim::_cache.u8(a);
-
-    stack[ramshim::PC] += 2;
   }
 
   void __not_in_flash_func(hard_fault_ldm)(uint32_t *stack, const uint16_t ins)

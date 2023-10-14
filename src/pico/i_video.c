@@ -973,13 +973,13 @@ bool __no_inline_not_in_flash_func(new_frame_stuff)() {
         video_scroll = next_video_scroll; // todo does this waste too much space
 #endif
         sem_release(&display_frame_freed);
-            } else {
+    } else {
 #if !DEMO1_ONLY
         video_scroll = NULL;
 #endif
     }
-    if (display_video_type != VIDEO_TYPE_SAVING) {
-        // this stuff is large (so in flash) and not needed in save move
+    if (display_video_type != VIDEO_TYPE_SAVING && frame_ready) {
+        // this stuff is large (so in flash) and not needed in save mode
         new_frame_init_overlays_palette_and_wipe();
     }
 
@@ -1034,7 +1034,7 @@ void __scratch_x("scanlines") fill_scanlines() {
         int scanline = picovision_last_scanline;
 #endif
         if ((int8_t) frame != last_frame_number) {
-            if (!new_frame_stuff()) {
+            if (!new_frame_stuff() || display_video_type == VIDEO_TYPE_SAVING) {
                 picovision_last_scanline = -1;
                 picovision_notify_next_vsync();
                 return;
