@@ -11,30 +11,30 @@ namespace ramshim {
 
   ramshim::cache_t _cache(_ram_start);
 
-  enum stack_offsets : uint8_t {
+  enum stack_offsets : int8_t {
     // values we added to the stack
-    R4  =  0,
-    R5  =  1,
-    R6  =  2,
-    R7  =  3,
-   _LR  =  4,  // link register for the error handler
+    R4  = -5,
+    R5  = -4,
+    R6  = -3,
+    R7  = -2,
+   _LR  = -1,  // link register for the error handler
 
     // default stack state on exception
-    R0  =  5,
-    R1  =  6,
-    R2  =  7,
-    R3  =  8,
-    R12 =  9,
-    LR  = 10,
-    PC  = 11,
-    PSR = 12
+    R0  =  0,
+    R1  =  1,
+    R2  =  2,
+    R3  =  3,
+    R12 =  4,
+    LR  =  5,
+    PC  =  6,
+    PSR =  7
   };
 
   // the registers are on the stack in the order 5, 6, 7, 8, 0, 1, 2, 3
   // this function takes the "natural" index of a register (e.g. 0 for r0,
   // or 2 for r2) and returns the index of it on the stack.
-  __always_inline uint8_t stack_index(uint8_t i) {
-    uint8_t map[8] = {R0, R1, R2, R3, R4, R5, R6, R7};
+  __always_inline int8_t stack_index(uint8_t i) {
+    int8_t map[8] = {R0, R1, R2, R3, R4, R5, R6, R7};
     return map[i];
   }
 
@@ -73,23 +73,11 @@ extern "C"
   void __not_in_flash_func(isr_hardfault)()
   {
     asm(
-      // push link register onto the stack
-      "push {lr}\n"
-
-      // push r4-r7 onto the stack
-      "push {r4-r7}\n"
-
-      // put the stack pointer into r0
+      // put the stack pointer into r0, this points at the standard fault stack
       "mrs r0, msp\n"
 
-      // call into our fault handler (r0-r3 are automatically pushed??)
-      "bl hard_fault_handler_c\n"
-
-      // restore r4-r7
-      "pop {r4-r7}\n"
-
-      // put link register value into program counter
-      "pop {pc}\n"
+      // jump into our fault handler, which will immediately push {r4, r5, r6, r7, lr} below the fault stack.
+      "b hard_fault_handler_c\n"
     );
   }
 #endif

@@ -991,8 +991,8 @@ static uint32_t scanline_buffer[SCREENWIDTH/2];
 static int16_t picovision_last_scanline = SCREENHEIGHT-1;
 #endif
 
-//void __scratch_x("scanlines") fill_scanlines() {
-void __no_inline_not_in_flash_func(fill_scanlines)() {
+void __scratch_x("scanlines") fill_scanlines() {
+//void __no_inline_not_in_flash_func(fill_scanlines)() {
 #if USE_INTERP
     need_save = interp_in_use;
     interp_updated = 0;
