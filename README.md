@@ -74,7 +74,7 @@ PicoVision version features:
 * USB Keyboard Input support.
 * All end scenes, intermissions, help screens etc. supported.
 * Mediocre frame rate; generally 12-20 FPS.  This is a WIP.
-* Uses 270Mhz overclock (requires flash chip that will run at 135Mhz)
+* Uses 266Mhz overclock
 
 # Building
 
