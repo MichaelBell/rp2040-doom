@@ -2338,12 +2338,6 @@ static void __noinline draw_regular_columns(int core) {
                 draw_patch_columns(-id, i, (int16_t*)buffer, buffer + WHD_PATCH_MAX_WIDTH * 2, translated);
                 DEBUG_PINS_CLR(render_thing, 1<<core);
             }
-
-            if (!core) {
-                restart_song_state |= 1; // we may not restart a song during this call because it may blow the stack
-                I_UpdateSound();
-                restart_song_state &= ~1;
-            }
         }
     }
 }
