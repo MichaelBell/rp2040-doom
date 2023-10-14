@@ -122,10 +122,12 @@ extern "C"
       uint32_t a =  ramshim::raddr(ins, stack);
       if ((a & 0xff800000) != 0x2f000000) __breakpoint();
 
+      stack[ramshim::PC] += 2; 
+      
       int32_t *t = (int32_t *)ramshim::srctar(ins, stack);
       // printf("ldrsb (reg): ");
       *t = ramshim::_cache.s8(a);
-      stack[ramshim::PC] += 2; return;
+      return;
     }
 
     __breakpoint();
