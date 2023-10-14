@@ -59,8 +59,7 @@ The main goals for this port were:
 
 PicoVision version features:
 
-* Full `DOOM1.WAD` playable.
-* *Ultimate Doom* and *Doom II* should be playable (not yet tested).
+* Shareware `DOOM1.WAD`, *Ultimate Doom* and *Doom II* are playable.
 * 320x200 DV output (really 720x400@70Hz), currently RGB555.
 * 9 Channel OPL2 Sound at 49716Hz.
 * 9 Channel Stereo Sound Effects.
