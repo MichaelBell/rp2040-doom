@@ -11,19 +11,14 @@ to store the compressed WAD file loaded from an SD card.
 
 You can read many details on the original RP2040 port in the blog post [here](https://kilograham.github.io/rp2040-doom/).
 
-Note that a hopefully-fully-functional `chocolate-doom` executable is buildable from this RP2040 code base as a 
-means of 
-verification that everything still works, but whilst they can still be built, Hexen, Strife and Heretic are almost 
-certainly broken, so are not built by default.
-
-This chocolate-doom commit that the code is branched off can be found in the `upstream` branch.
+Note that I have not been maintaining the `chocolate-doom` executable for non-RP2040 - it's probably broken.
 
 The original Chocolate Doom README is [here](README-chocolate.md).
 
 ## PicoVision Doom Quickstart
 
 Grab a [PicoVision](https://shop.pimoroni.com/products/picovision), put the doom1.whx file in the root directory of an SD card and insert that in the PicoVision.
-Download doom_tiny_usb from the latest [GitHub action](https://github.com/MichaelBell/rp2040-doom/actions) run, load it onto the PicoVision, and away you go!
+Download doom_tiny_usb from the latest [release](https://github.com/MichaelBell/rp2040-doom/releases/tag/v0.2-vision), load it onto the PicoVision, and away you go!
 
 ## Code State
 
@@ -57,7 +52,7 @@ The main goals for the RP2040 port were:
 2. `DOOM1.WAD` should run on a Raspberry Pi Pico. There was also to be no sneaky discarding of splash screens, altering of levels, down-sampling of
    textures or whatever. RP2040 boards with 8M should be able to play at least the full *Ultimate Doom* and *DOOM II*
    WADs.
-3. The RP2040 should output directly to VGA (16 color pins for RGB565 along with HSync/VSync - now replaced by digital video output) along with stereo sound
+3. The RP2040 should output directly to VGA (16 color pins for RGB565 along with HSync/VSync - now replaced by RGB777 digital video output) along with stereo sound
 
 ## Results
 
