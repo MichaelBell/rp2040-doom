@@ -23,7 +23,7 @@ The original Chocolate Doom README is [here](README-chocolate.md).
 ## PicoVision Doom Quickstart
 
 Grab a [PicoVision](https://shop.pimoroni.com/products/picovision), put the doom1.whx file in the root directory of an SD card and insert that in the PicoVision.
-Build doom_tiny_usb (more details [below](#rp2040-doom-builds)), load it onto the PicoVision, and away you go!
+Grab doom_tiny_usb from the latest [GitHub action](https://github.com/MichaelBell/rp2040-doom/actions) run, load it onto the PicoVision, and away you go!
 
 ## Code State
 
