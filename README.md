@@ -23,7 +23,7 @@ The original Chocolate Doom README is [here](README-chocolate.md).
 ## PicoVision Doom Quickstart
 
 Grab a [PicoVision](https://shop.pimoroni.com/products/picovision), put the doom1.whx file in the root directory of an SD card and insert that in the PicoVision.
-Grab doom_tiny_usb from the latest [GitHub action](https://github.com/MichaelBell/rp2040-doom/actions) run, load it onto the PicoVision, and away you go!
+Download doom_tiny_usb from the latest [GitHub action](https://github.com/MichaelBell/rp2040-doom/actions) run, load it onto the PicoVision, and away you go!
 
 ## Code State
 
@@ -64,7 +64,7 @@ The main goals for the RP2040 port were:
 PicoVision version features:
 
 * Shareware `DOOM1.WAD`, *Ultimate Doom* and *Doom II* are playable.
-* 320x200 DV output (really 720x400@70Hz), currently RGB555.
+* 320x200 DV output (really 720x400@70Hz), 21-bit colour.
 * 9 Channel OPL2 Sound at 49716Hz.
 * 9 Channel Stereo Sound Effects.
 * I2C networking for up to 4 players.
@@ -73,7 +73,7 @@ PicoVision version features:
 * Demos from original WADs run correctly.
 * USB Keyboard Input support.
 * All end scenes, intermissions, help screens etc. supported.
-* Mediocre frame rate; generally 12-20 FPS.  This is a WIP.
+* Reasonable frame rate; generally 15-25 FPS.
 * Uses 266Mhz overclock
 
 # Building
