@@ -274,6 +274,18 @@ uint8_t __not_in_flash_func(picovision_read_byte_from_cache)(const uint8_t* addr
   return ramshim::_cache.u8((uintptr_t)addr);
 }
 
+uint16_t __not_in_flash_func(picovision_read_word_from_cache)(const uint16_t* addr)
+{
+  if (((uintptr_t)addr & 0xFF000000) != 0x2F000000) __breakpoint();
+  return ramshim::_cache.u16((uintptr_t)addr);
+}
+
+uint32_t __not_in_flash_func(picovision_read_dword_from_cache)(const uint32_t* addr)
+{
+  if (((uintptr_t)addr & 0xFF000000) != 0x2F000000) __breakpoint();
+  return ramshim::_cache.u32((uintptr_t)addr);
+}
+
 void __not_in_flash_func(picovision_read_bytes_from_cache)(const uint8_t* addr, uint8_t* buf, uint32_t len)
 {
   if (((uintptr_t)addr & 0xFF000000) != 0x2F000000) __breakpoint();

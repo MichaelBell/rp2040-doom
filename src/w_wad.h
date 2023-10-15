@@ -26,6 +26,9 @@
 #include "doomtype.h"
 #include "w_file.h"
 
+#if PICO_ON_DEVICE
+#include "pico/picovision/picovision.h"
+#endif
 
 //
 // TYPES
@@ -96,7 +99,7 @@ static inline should_be_const uint8_t *lump_data(const lumpinfo_t *lump) {
 #if !USE_WHD
     return (const uint8_t *)lump->mem;
 #else
-    return whd_map_base + ((*lump)&0xffffffu);
+    return whd_map_base + (picovision_read_dword_from_cache(lump)&0xffffffu);
 #endif
 }
 #endif

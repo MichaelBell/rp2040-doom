@@ -651,15 +651,19 @@ static uint32_t* scanline_func_wipe(uint32_t *dest, int scanline) {
     return NULL;
 }
 
+static uint8_t vpatch_buffer[SCREENWIDTH/2];
+
 static inline uint draw_vpatch(uint8_t *dest, patch_t *patch, vpatchlist_t *vp, uint off) {
     int repeat = vp->entry.repeat;
     dest += vp->entry.x;
-    int w = vpatch_width(patch);
+    uint8_t buf[4];
+    picovision_read_bytes_from_cache(patch, buf, 4);
+    int w = vpatch_width(buf);
     const uint8_t *data0 = vpatch_data(patch);
     const uint8_t *data = data0 + off;
     {
         const uint8_t *pal;
-        if (!vpatch_has_shared_palette(patch)) {
+        if (!vpatch_has_shared_palette(buf)) {
             pal = vpatch_palette(patch);
         }
         else {
@@ -667,7 +671,7 @@ static inline uint draw_vpatch(uint8_t *dest, patch_t *patch, vpatchlist_t *vp, 
             pal = shared_pal[sp];
         }
 
-        switch (vpatch_type(patch)) {
+        switch (vpatch_type(buf)) {
             case vp4_runs: {
                 uint8_t *p = dest;
                 uint8_t *pend = dest + w;
@@ -689,6 +693,10 @@ static inline uint draw_vpatch(uint8_t *dest, patch_t *patch, vpatchlist_t *vp, 
                 break;
             }
             case vp4_alpha: {
+                picovision_read_bytes_from_cache(data, vpatch_buffer, (w+1) >> 1);
+                data = vpatch_buffer;
+                data0 = data - off;
+
                 uint8_t *p = dest;
                 for (int i = 0; i < w / 2; i++) {
                     uint v = *data++;
@@ -703,6 +711,10 @@ static inline uint draw_vpatch(uint8_t *dest, patch_t *patch, vpatchlist_t *vp, 
                 break;
             }
             case vp4_solid: {
+                picovision_read_bytes_from_cache(data, vpatch_buffer, (w+1) >> 1);
+                data = vpatch_buffer;
+                data0 = data - off;
+
                 uint8_t *p = dest;
                 for (int i = 0; i < w / 2; i++) {
                     uint v = *data++;
@@ -794,6 +806,8 @@ static inline uint draw_vpatch(uint8_t *dest, patch_t *patch, vpatchlist_t *vp, 
 
 // this is not in flash as quite large and only once per frame
 void __noinline new_frame_init_overlays_palette_and_wipe() {
+    picovision_print_profile();
+
     // re-initialize our overlay drawing
     if (display_video_type >= FIRST_VIDEO_TYPE_WITH_OVERLAYS) {
         memset(vpatchlists->vpatch_next, 0, sizeof(vpatchlists->vpatch_next));
@@ -926,7 +940,7 @@ bool __no_inline_not_in_flash_func(new_frame_stuff)() {
 }
 
 #if PICOVISION
-static uint32_t scanline_buffer[SCREENWIDTH/4];
+static uint32_t scanline_buffer[2][SCREENWIDTH/4];
 static int16_t picovision_last_scanline = SCREENHEIGHT-1;
 #endif
 
@@ -983,7 +997,7 @@ void __scratch_x("scanlines") fill_scanlines() {
         }
 
 #if PICOVISION
-        uint32_t* data_buffer = scanline_buffer;
+        uint32_t* data_buffer = scanline_buffer[scanline & 1];
 #else
         uint32_t* data_buffer = buffer->data+1;
 #endif
@@ -1015,7 +1029,7 @@ void __scratch_x("scanlines") fill_scanlines() {
                 for (int vp = vpatchlists->vpatch_next[prev]; vp; vp = vpatchlists->vpatch_next[prev]) {
                     patch_t *patch = resolve_vpatch_handle(overlays[vp].entry.patch_handle);
                     int yoff = scanline - overlays[vp].entry.y;
-                    if (yoff < vpatch_height(patch)) {
+                    if (yoff < picovision_read_byte_from_cache(patch+1)) {
                         if (direct_buffer) {
                             memcpy(data_buffer, direct_buffer, SCREENWIDTH);
                             direct_buffer = NULL;

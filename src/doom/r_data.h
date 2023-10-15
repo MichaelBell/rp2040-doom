@@ -25,6 +25,10 @@
 #include "r_defs.h"
 #include "r_state.h"
 
+#if PICO_ON_DEVICE
+#include "pico/picovision/picovision.h"
+#endif
+
 #if !USE_WHD
 typedef const byte *texturecolumn_t;
 typedef const column_t *maskedcolumn_t;
@@ -83,7 +87,11 @@ static inline texturecolumn_t R_GetColumn(framedrawable_t *fd, int col) {
     // had seen this in the past with bug related to certain maps (hopefully now fixed everywhere)
     // todo ^ happens in tnt for now due to anim issue
     assert( whd_textures[fd->real_id].width != 0); // texture is missing
+#if PICOVISION
+    col &= (picovision_read_word_from_cache(&whd_textures[fd->real_id].width) - 1);
+#else
     col &= (whd_textures[fd->real_id].width - 1);
+#endif
     return make_drawcolumn(fd, col);
 }
 
@@ -123,7 +131,11 @@ int R_FlatNumForName(flatname_t name);
 #define R_FlatNumForName(x) (x)
 extern const uint16_t *whd_vpatch_numbers;
 //#define check_vpatch_handle(handle) ({assert((handle)<NUM_VPATCHES); whd_vpatch_numbers[handle]; })
+#if PICOVISION
+#define check_vpatch_handle(handle) picovision_read_word_from_cache(&whd_vpatch_numbers[handle])
+#else
 #define check_vpatch_handle(handle) whd_vpatch_numbers[handle]
+#endif
 #define resolve_vpatch_handle(handle) ((const patch_t *)W_CacheLumpNum(check_vpatch_handle(handle), PU_STATIC))
 #endif
 

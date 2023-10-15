@@ -34,6 +34,7 @@
 #include "r_sky.h"
 #if PICO_DOOM
 #include "picodoom.h"
+#include "pico/picovision/picovision.h"
 #endif
 #if USE_WHD
 #include "p_spec.h"
@@ -928,6 +929,43 @@ R_StoreWallRange
 #if PD_COLUMNS && USE_WHD
 void pd_add_column2(pd_column_type type) {
     assert(dc_source.real_id >= 0);
+
+#if PICOVISION
+    uint8_t buf[4];
+    picovision_read_bytes_from_cache(&whd_textures[dc_source.real_id].patch_count, buf, 3);
+    int pc = buf[0];
+    uint16_t b2 = buf[1] | (buf[2] << 8);
+    if (!pc) {
+        dc_source = make_drawcolumn(lookup_patch(b2-firstspritelump), dc_source.col);
+    } else {
+        uint8_t *patch_table = &((uint8_t *)whd_textures)[b2];
+        uint8_t* metadata = patch_table + pc * 2;
+        
+        int xx = 0;
+        do {
+            picovision_read_bytes_from_cache(metadata, buf, 1);
+            uint b=buf[0];
+            if (xx + 1 + (b&0x7f) > dc_source.col) break;
+            xx = xx + 1 + (b&0x7f);
+            metadata += 1 + 2 * (b>>7u);
+        } while (true);
+        if (buf[0] & 0x80) {
+            picovision_read_bytes_from_cache(metadata+1, buf, 2);
+            int pn = buf[0];
+            if (pn != 0xff) { // todo this was here before zero patch columns, but i can't see why (it used to fall thru to regular add column type)
+              // single patch column
+                assert(pn < pc);
+                picovision_read_bytes_from_cache(&patch_table[pn*2], buf+2, 2);
+                uint pnum = buf[2] | (buf[3] << 8);
+                // note as pre R_GenerateLookup, a single patch column ignores the patch offsety
+                dc_source = make_drawcolumn(lookup_patch(pnum-firstspritelump), (uint8_t)(dc_source.col - buf[1]));
+            } else {
+#warning untested no patch column
+                return;
+            }
+        }
+    }
+#else
     int pc = whd_textures[dc_source.real_id].patch_count;
     if (!pc) {
         dc_source = make_drawcolumn(lookup_patch(whd_textures[dc_source.real_id].patch0-firstspritelump), dc_source.col);
@@ -956,6 +994,7 @@ void pd_add_column2(pd_column_type type) {
             }
         }
     }
+#endif
     pd_add_column(type);
 }
 #endif

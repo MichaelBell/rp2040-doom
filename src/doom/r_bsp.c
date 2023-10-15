@@ -36,6 +36,7 @@
 #if PICO_ON_DEVICE
 #include "i_sound.h"
 #include "pico/time.h"
+#include "pico/picovision/picovision.h"
 #endif
 //#include "r_local.h"
 
@@ -534,7 +535,7 @@ void R_RenderBSPNode(int bspnum)
 void R_RenderBSPNode (int bspnum, node_coord_t *bbox)
 #endif
 {
-    node_t *bsp;
+    node_t bsp;
     int side;
 
     // todo graham we should loop not recurse perhaps?
@@ -557,21 +558,21 @@ void R_RenderBSPNode (int bspnum, node_coord_t *bbox)
         t0 = t;
     }
 #endif
-    bsp = &nodes[bspnum];
+    picovision_read_bytes_from_cache((uint8_t*)&nodes[bspnum], (uint8_t*)&bsp, sizeof(node_t));
 
     // Decide which side the view point is on.
-    side = R_PointOnSide(viewx, viewy, bsp);
+    side = R_PointOnSide(viewx, viewy, &bsp);
 //    printf("NODE %d v %d,%d p %d,%d dir %d,%d\n", bspnum, viewx, viewy, bsp->x, bsp->y, bsp->dx, bsp->dy);
 
     // Recursively divide front space.
 #if !WHD_SUPER_TINY
-    R_RenderBSPNode(bsp->children[side]);
+    R_RenderBSPNode(bsp.children[side]);
 #else
     node_coord_t subbox[4];
-    subbox[BOXLEFT] = bbox[BOXLEFT] + (((bsp->bbox_lw[side] & 0xf0u) * (bbox[BOXRIGHT] - bbox[BOXLEFT])) >> 8u);
-    subbox[BOXRIGHT] = subbox[BOXLEFT] + ((((bsp->bbox_lw[side] & 0xfu) + 1) * (bbox[BOXRIGHT] - subbox[BOXLEFT])) >> 4u);
-    subbox[BOXBOTTOM] = bbox[BOXBOTTOM] + (((bsp->bbox_th[side] & 0xf0u) * (bbox[BOXTOP] - bbox[BOXBOTTOM])) >> 8u);
-    subbox[BOXTOP] = subbox[BOXBOTTOM] + ((((bsp->bbox_th[side] & 0xfu) + 1) * (bbox[BOXTOP] - subbox[BOXBOTTOM])) >> 4u);
+    subbox[BOXLEFT] = bbox[BOXLEFT] + (((bsp.bbox_lw[side] & 0xf0u) * (bbox[BOXRIGHT] - bbox[BOXLEFT])) >> 8u);
+    subbox[BOXRIGHT] = subbox[BOXLEFT] + ((((bsp.bbox_lw[side] & 0xfu) + 1) * (bbox[BOXRIGHT] - subbox[BOXLEFT])) >> 4u);
+    subbox[BOXBOTTOM] = bbox[BOXBOTTOM] + (((bsp.bbox_th[side] & 0xf0u) * (bbox[BOXTOP] - bbox[BOXBOTTOM])) >> 8u);
+    subbox[BOXTOP] = subbox[BOXBOTTOM] + ((((bsp.bbox_th[side] & 0xfu) + 1) * (bbox[BOXTOP] - subbox[BOXBOTTOM])) >> 4u);
     R_RenderBSPNode(bsp_child(bspnum, side), subbox);
 #endif
 
@@ -579,14 +580,14 @@ void R_RenderBSPNode (int bspnum, node_coord_t *bbox)
 #if !WHD_SUPER_TINY
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Waddress-of-packed-member"
-    if (R_CheckBBox(bsp->bbox[side ^ 1]))
-        R_RenderBSPNode(bsp->children[side ^ 1]);
+    if (R_CheckBBox(bsp.bbox[side ^ 1]))
+        R_RenderBSPNode(bsp.children[side ^ 1]);
 #pragma GCC diagnostic pop
 #else
-    subbox[BOXLEFT] = bbox[BOXLEFT] + (((bsp->bbox_lw[side^1] & 0xf0u) * (bbox[BOXRIGHT] - bbox[BOXLEFT])) >> 8u);
-    subbox[BOXRIGHT] = subbox[BOXLEFT] + ((((bsp->bbox_lw[side^1] & 0xfu) + 1) * (bbox[BOXRIGHT] - subbox[BOXLEFT])) >> 4u);
-    subbox[BOXBOTTOM] = bbox[BOXBOTTOM] + (((bsp->bbox_th[side^1] & 0xf0u) * (bbox[BOXTOP] - bbox[BOXBOTTOM])) >> 8u);
-    subbox[BOXTOP] = subbox[BOXBOTTOM] + ((((bsp->bbox_th[side^1] & 0xfu) + 1) * (bbox[BOXTOP] - subbox[BOXBOTTOM])) >> 4u);
+    subbox[BOXLEFT] = bbox[BOXLEFT] + (((bsp.bbox_lw[side^1] & 0xf0u) * (bbox[BOXRIGHT] - bbox[BOXLEFT])) >> 8u);
+    subbox[BOXRIGHT] = subbox[BOXLEFT] + ((((bsp.bbox_lw[side^1] & 0xfu) + 1) * (bbox[BOXRIGHT] - subbox[BOXLEFT])) >> 4u);
+    subbox[BOXBOTTOM] = bbox[BOXBOTTOM] + (((bsp.bbox_th[side^1] & 0xf0u) * (bbox[BOXTOP] - bbox[BOXBOTTOM])) >> 8u);
+    subbox[BOXTOP] = subbox[BOXBOTTOM] + ((((bsp.bbox_th[side^1] & 0xfu) + 1) * (bbox[BOXTOP] - subbox[BOXBOTTOM])) >> 4u);
     if (R_CheckBBox(subbox))
         R_RenderBSPNode(bsp_child(bspnum, side^1), subbox);
 #endif

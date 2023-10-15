@@ -1,3 +1,6 @@
+#include <string.h>
+#include "hardware/gpio.h"
+
 namespace ramshim {
 
   volatile uint32_t faults = 0;
@@ -116,10 +119,59 @@ extern "C"
 
   // stm         11000 nnnrrrrrrrr
 
+  #define ENABLE_HF_PROFILE 0
+
+  #define NUM_PROFILE_ENTRIES 400
+  struct profile_entry {
+    uint32_t pc;
+    uint32_t count;
+  } profile[NUM_PROFILE_ENTRIES] = {0};
+
+  static void __not_in_flash_func(add_profile_entry)(uint32_t pc)
+  {
+    static uint8_t foo = 0;
+    if (gpio_get(9) == 0 && (foo++ & 7) == 0) {
+      for (int i = 0; i < NUM_PROFILE_ENTRIES; ++i) {
+        if (profile[i].pc == pc) {
+          profile[i].count++;
+          return;
+        }
+        else if (profile[i].pc == 0) {
+          profile[i].pc = pc;
+          profile[i].count = 1;
+          return;
+        }
+      }
+    }
+  }
+
+  static void clear_profile() {
+    memset(&profile, 0, sizeof(profile));
+  }
+
+  void picovision_print_profile() {
+#if ENABLE_HF_PROFILE
+    gpio_init(9);
+    gpio_set_pulls(9, true, false);
+    if (gpio_get(9) == 0) {
+      printf("\nProfile:\n");
+      for (int i = 0; i < NUM_PROFILE_ENTRIES; ++i) {
+        if (profile[i].count > 50) {
+          printf("%08x: %d\n", (uint)profile[i].pc, (uint)profile[i].count);
+        }
+      }
+      clear_profile();
+    }
+#endif
+  }
+
   void __not_in_flash_func(hard_fault_ldrsb)(uint32_t *stack, const uint16_t ins)
   {
     // Force the compiler to push r4-r7 onto the stack
     //asm("" : : : "r4", "r5", "r6", "r7" );
+#if ENABLE_HF_PROFILE
+    add_profile_entry(stack[ramshim::PC]);
+#endif
 
     const uint8_t variant = (ins >>  9) & 0b11;    // 2 bit op code variant
     if(variant == 0b11) { // ldrsb (reg)
@@ -141,6 +193,10 @@ extern "C"
   {
     // Force the compiler to push r4-r7 onto the stack
     //asm("" : : : "r4", "r5", "r6", "r7" );
+
+#if ENABLE_HF_PROFILE
+    add_profile_entry(stack[ramshim::PC]);
+#endif
 
     const uint8_t variant = (ins >>  9) & 0b11;    // 2 bit op code variant
 
@@ -171,6 +227,10 @@ extern "C"
     // Force the compiler to push r4-r7 onto the stack
     //asm("" : : : "r4", "r5", "r6", "r7" );
 
+#if ENABLE_HF_PROFILE
+    add_profile_entry(stack[ramshim::PC]);
+#endif
+
     uint32_t  a =  ramshim::iaddr(ins, 4, stack);
     if ((a & 0xff800000) != 0x2f000000) __breakpoint();
 
@@ -185,6 +245,10 @@ extern "C"
   {
     // Force the compiler to push r4-r7 onto the stack
     //asm("" : : : "r4", "r5", "r6", "r7" );
+
+#if ENABLE_HF_PROFILE
+    add_profile_entry(stack[ramshim::PC]);
+#endif
 
     uint32_t  a =  ramshim::iaddr(ins, 2, stack);
     if ((a & 0xff800000) != 0x2f000000) __breakpoint();
@@ -201,6 +265,10 @@ extern "C"
     // Force the compiler to push r4-r7 onto the stack
     //asm("" : : : "r4", "r5", "r6", "r7" );
 
+#if ENABLE_HF_PROFILE
+    add_profile_entry(stack[ramshim::PC]);
+#endif
+
     uint32_t  a =  ramshim::iaddr(ins, 1, stack);
     if ((a & 0xff800000) != 0x2f000000) __breakpoint();
 
@@ -215,6 +283,10 @@ extern "C"
   {
     // Force the compiler to push r4-r7 onto the stack
     //asm("" : : : "r4", "r5", "r6", "r7" );
+
+#if ENABLE_HF_PROFILE
+    add_profile_entry(stack[ramshim::PC]);
+#endif
 
     uint32_t addr_reg = (ins >> 8) & 0b111;
     uint32_t  a = stack[ramshim::stack_index(addr_reg)];

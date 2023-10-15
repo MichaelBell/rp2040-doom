@@ -1254,6 +1254,10 @@ static uint8_t *decode_flat_to_slot(int cache_slot, int picnum) {
     return flat_data;
 }
 
+static lighttable_t colormap_cache[2][256];
+static const lighttable_t* cached_map[2] = {0};
+
+
 static void flush_visplanes(int8_t *flatnum_next, int numvisplanes) {
 //    printf("FRAME %d %d\n", pd_frame, numvisplanes);
     angle_t angle = (viewangle + x_to_viewangle(0)) >> ANGLETOFINESHIFT;
@@ -1264,6 +1268,11 @@ static void flush_visplanes(int8_t *flatnum_next, int numvisplanes) {
     viewcosangle = FixedMul(distscale0, viewcosangle);
     viewsinangle = FixedMul(distscale0, viewsinangle);
 #endif
+
+#if PICO_ON_DEVICE
+    const uint core = get_core_num();
+#endif
+
     // two passes; first pass we try to reuse flats we have decoded
     int cache_slot = 0;
     for(int pass=0;pass<2;pass++) {
@@ -1375,6 +1384,15 @@ static void flush_visplanes(int8_t *flatnum_next, int numvisplanes) {
 #endif
                             }
                             colormap = xcolormaps + colormap_index * 256;
+#if PICOVISION
+                            lighttable_t* cache = colormap_cache[core];
+                            if (cache != cached_map[core]) {
+                                picovision_read_bytes(colormap, cache, 256);
+                                cached_map[core] = colormap;
+                            }
+                            colormap = cache;
+#endif
+
                             delta = flat_runs[fr].x_start;
                             last_y = flat_runs[fr].y;
                         } else {
@@ -1537,9 +1555,6 @@ static void draw_visplanes(int16_t fr_list) {
         flush_visplanes(flatnum_next, numvisplanes);
     }
 }
-
-static lighttable_t colormap_cache[2][256];
-static const lighttable_t* cached_map[2] = {0};
 
 static inline void col_render(uint8_t *dest, uint count, const uint8_t *source, fixed_t frac, fixed_t fracstep, const lighttable_t* colormap) {
 #if 0 && PICO_ON_DEVICE
@@ -2362,8 +2377,16 @@ static void __noinline draw_regular_columns(int core) {
 int8_t fuzzpos;
 
 static void draw_fuzz_columns() {
+    const lighttable_t *darken_map = xcolormaps + 256 * 6;
+#if PICOVISION
+    lighttable_t* cache = colormap_cache[0];
+    if (darken_map != cached_map[0]) {
+        picovision_read_bytes(darken_map, cache, 256);
+        cached_map[0] = darken_map;
+    }
+    darken_map = cache;
+#endif
     for (int x = 0; x < SCREENWIDTH; x++) {
-        const lighttable_t *darken_map = xcolormaps + 256 * 6;
         int16_t i = fuzzy_column_heads[x];
         while (i >= 0) {
             const auto &c = render_cols[i];

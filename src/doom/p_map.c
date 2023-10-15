@@ -40,7 +40,9 @@
 // Data.
 #include "sounds.h"
 
+#ifdef PICO_ON_DEVICE
 #include "pico/picovision/picovision.h"
+#endif
 
 // Spechit overrun magic value.
 //
@@ -204,7 +206,7 @@ static void SpechitOverrun(line_t *ld);
 //
 boolean PIT_CheckLine (line_t* ld_src)
 {
-#if PICOVISION
+#if PICOVISION && !WHD_SUPER_TINY
     line_t ld_cache;
     picovision_read_bytes_from_cache((uint8_t*)ld_src, (uint8_t*)&ld_cache, sizeof(ld_cache));
     line_t* ld = &ld_cache;

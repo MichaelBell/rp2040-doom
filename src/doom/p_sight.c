@@ -27,6 +27,10 @@
 // State.
 #include "r_state.h"
 
+#if PICO_ON_DEVICE
+#include "pico/picovision/picovision.h"
+#endif
+
 //
 // P_CheckSight
 //
@@ -159,11 +163,20 @@ boolean P_CrossSubsector (int num)
 
     for ( ; seg != seg_end; seg += seg_next_step(seg))
     {
+#if PICOVISION && !WHD_SUPER_TINY
+	if (line_validcount_update_check(seg_linedef(seg), validcount))
+	    continue;
+
+        line_t cached_line;
+        picovision_read_bytes_from_cache((uint8_t*)seg_linedef(seg), (uint8_t*)&cached_line, sizeof(cached_line));
+        line = &cached_line;
+#else
 	line = seg_linedef(seg);
 
 	// allready checked other side?
 	if (line_validcount_update_check(line, validcount))
 	    continue;
+#endif
 
 	v1 = line_v1(line);
 	v2 = line_v2(line);
@@ -256,7 +269,7 @@ boolean P_CrossSubsector (int num)
 //
 boolean P_CrossBSPNode (int bspnum)
 {
-    node_t*	bsp;
+    node_t	bsp;
     int		side;
 
     if (bspnum & NF_SUBSECTOR)
@@ -266,13 +279,13 @@ boolean P_CrossBSPNode (int bspnum)
 	else
 	    return P_CrossSubsector (bspnum&(~NF_SUBSECTOR));
     }
-		
-    bsp = &nodes[bspnum];
+
+    picovision_read_bytes_from_cache((uint8_t*)&nodes[bspnum], (uint8_t*)&bsp, 8);
     
     // decide which side the start point is on
 #if USE_RAW_MAPNODE
     // these functions seem identical anyway
-    side = R_PointOnSide(strace.x, strace.y, bsp);
+    side = R_PointOnSide(strace.x, strace.y, &bsp);
 #else
     side = P_DivlineSide (strace.x, strace.y, (divline_t *)bsp);
 #endif
@@ -286,7 +299,7 @@ boolean P_CrossBSPNode (int bspnum)
     // the partition plane is crossed here
 #if USE_RAW_MAPNODE
     // these functions seem identical anyway
-    if (side == R_PointOnSide(t2x, t2y, bsp))
+    if (side == R_PointOnSide(t2x, t2y, &bsp))
 #else
     if (side == P_DivlineSide (t2x, t2y,(divline_t *)bsp))
 #endif

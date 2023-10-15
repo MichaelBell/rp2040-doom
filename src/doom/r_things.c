@@ -47,6 +47,8 @@ int no_draw_psprites;
 #include "doomstat.h"
 #if PICO_DOOM
 
+#include "pico/picovision/picovision.h"
+
 #include "picodoom.h"
 #include "v_patch.h"
 #endif
@@ -434,12 +436,18 @@ void R_DrawMaskedColumn(maskedcolumn_t column) {
         patch_t *patch = W_CacheLumpNum(-(int)column.real_id, PU_CACHE);
         assert(patch);
         assert(column.col >=0 && column.col < patch_width(patch));
-        dc_source = column;
+        dc_source.fd_num = column.fd_num;
+        dc_source.col = column.col;
+        dc_source.real_id = column.real_id;
 #define MAX_SEGS 64
         uint8_t ysegs[MAX_SEGS*3];
         int seg_count = 0;
-        int height = patch_height(patch);
-        if (patch_fully_opaque(patch)) {
+
+        uint8_t buf[4];
+        picovision_read_bytes_from_cache(patch, buf, 4);
+
+        int height = patch_height(buf);
+        if (patch_fully_opaque(buf)) {
             int yl, yh;
             // calculate unclipped screen coordinates
             //  for post
@@ -469,26 +477,26 @@ void R_DrawMaskedColumn(maskedcolumn_t column) {
             int yl, yh;
             int last = -1;
             th_backwards_bit_input rbi;
-            uint data_index = 3 + patch_has_extra(patch);
-            data_index += ((uint8_t*)patch)[data_index*2]; // skip over decoder metadata
+            uint data_index = 3 + patch_has_extra(buf);
+            data_index += picovision_read_byte_from_cache(&((uint8_t*)patch)[data_index*2]); // skip over decoder metadata
             uint16_t *col_offsets = &((uint16_t*)patch)[data_index];
-            uint16_t col_offset = col_offsets[column.col];
+            uint16_t col_offset = picovision_read_word_from_cache(&col_offsets[column.col]);
             uint next_column;
             if (0xff == (col_offset >> 8)) {
                 next_column = (col_offset & 0xff);
-                assert(next_column < patch_width(patch));
+                assert(next_column < patch_width(buf));
                 next_column++;
             } else {
                 next_column = column.col + 1;
             }
-            col_offset = col_offsets[next_column]; // we work backwards from the next column
+            col_offset = picovision_read_word_from_cache(&col_offsets[next_column]); // we work backwards from the next column
             // we have to skip over any columns which aren't stored
             while (0xff == (col_offset >> 8)) {
-                assert(next_column < patch_width(patch)); // note < and ++ afterwards; we are allowed to read one beyond width which is the "end" marker column
-                col_offset = col_offsets[++next_column];
+                assert(next_column < patch_width(buf)); // note < and ++ afterwards; we are allowed to read one beyond width which is the "end" marker column
+                col_offset = picovision_read_word_from_cache(&col_offsets[++next_column]);
             }
-            data_index = (data_index + patch_width(patch)) * 2 + 2; // + 2 because we have one extra col_data offset
-            if (patch_byte_addressed(patch)) {
+            data_index = (data_index + patch_width(buf)) * 2 + 2; // + 2 because we have one extra col_data offset
+            if (patch_byte_addressed(buf)) {
                 th_backwards_bit_input_init(&rbi, patch + data_index + col_offset); // todo read off end potential
             } else {
                 th_backwards_bit_input_init_bit_offset(&rbi, patch + data_index, col_offset); // todo read off end potential

@@ -37,6 +37,10 @@
 #include "hardware/gpio.h"
 #include "pico/sync.h"
 
+#if PICO_ON_DEVICE
+#include "pico/picovision/picovision.h"
+#endif
+
 #define ADPCM_BLOCK_SIZE 128
 #define ADPCM_SAMPLES_PER_BLOCK_SIZE 249
 #define LOW_PASS_FILTER
@@ -199,7 +203,9 @@ static void decompress_buffer(channel_t *channel) {
         channel->decompressed_size = 0;
     } else {
         int block_size = MIN(ADPCM_BLOCK_SIZE, channel->data_end - channel->data);
-        channel->decompressed_size = adpcm_decode_block_s8(channel->decompressed, channel->data, block_size);
+        uint8_t data[ADPCM_BLOCK_SIZE];
+        picovision_read_bytes(channel->data, data, block_size);
+        channel->decompressed_size = adpcm_decode_block_s8(channel->decompressed, data, block_size);
         assert(channel->decompressed_size && channel->decompressed_size <= sizeof(channel->decompressed));
         channel->data += block_size;
     }
