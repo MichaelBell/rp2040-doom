@@ -33,7 +33,7 @@ static constexpr uint frame_width = 360;
 static constexpr uint frame_height = 200;
 static constexpr uint h_repeat = 2;
 static constexpr uint v_repeat = 2;
-#define NUM_PALETTES 0
+#define NUM_PALETTES 8
 
 // interface pins
 static constexpr uint VSYNC  = 16;
@@ -119,11 +119,11 @@ void write_header()
     constexpr int maxy = display_height;
 
     uint addr = 4 * (7 + miny);
-    uint line_type = (uint)1 << 27;
+    uint line_type = 0;
     for (int i = miny; i < maxy; i += buf_size) {
       int maxj = std::min(buf_size, maxy - i);
       for (int j = 0; j < maxj; ++j) {
-        buf[j] = line_type + ((uint32_t)h_repeat << 24) + ((i + j) * 1024) + BASE_ADDRESS - 40;
+        buf[j] = line_type + ((uint32_t)h_repeat << 24) + ((i + j) * 1024) + BASE_ADDRESS - 20;
       }
       ram.write(addr, buf, maxj * 4);
       ram.wait_for_finish_blocking();
@@ -131,7 +131,12 @@ void write_header()
     }
 
     // Clear screen
-    ram.write_repeat(BASE_ADDRESS - 40, 0, display_height * 1024);
+    ram.write_repeat(BASE_ADDRESS - 20, 0, display_height * 1024);
+}
+
+void __not_in_flash_func(picovision_write_palette)(uint8_t* palette) {
+  uint addr = (display_height + 7) * 4;
+  ram.write(addr, (uint32_t*)palette, 256 * 3);
 }
 
 void read_wxd()
@@ -238,7 +243,7 @@ void __not_in_flash_func(picovision_write_line)(int y, uint32_t* data)
     #endif
 
     uint32_t addr = BASE_ADDRESS + y * 1024;
-    ram.write_fast_irq(addr, data, 320*2);
+    ram.write_fast_irq(addr, data, 320);
 }
 
 void __not_in_flash_func(picovision_flip)()

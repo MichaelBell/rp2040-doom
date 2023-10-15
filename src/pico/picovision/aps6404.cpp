@@ -257,7 +257,8 @@ namespace pimoroni {
         }
     }
 
-    void APS6404::write(uint32_t addr, uint32_t* data, uint32_t len_in_bytes) {
+    void __not_in_flash_func(APS6404::write)(uint32_t addr, uint32_t* data, uint32_t len_in_bytes) {
+        critical_section_enter_blocking(&mutex);
         if (!last_cmd_was_write) {
             last_cmd_was_write = true;
             wait_for_finish_blocking();
@@ -267,6 +268,7 @@ namespace pimoroni {
 
         if (!page_smashing_ok) {
             write_no_page_crossing(addr, data, len_in_bytes);
+            critical_section_exit(&mutex);
             return;
         }
 
@@ -283,6 +285,7 @@ namespace pimoroni {
 
             dma_channel_transfer_from_buffer_now(dma_channel, data, (page_len >> 2) + 1);
         }
+        critical_section_exit(&mutex);
     }
 
     void __not_in_flash_func(APS6404::write_fast_irq)(uint32_t addr, uint32_t* data, uint32_t len_in_bytes) {

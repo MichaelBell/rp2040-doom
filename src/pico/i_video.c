@@ -140,8 +140,8 @@ unsigned int joywait = 0;
 pixel_t *I_VideoBuffer; // todo can't have this
 
 uint8_t __aligned(4) frame_buffer[2][SCREENWIDTH*MAIN_VIEWHEIGHT];
-static uint16_t palette[256];
-static uint16_t __scratch_x("shared_pal") shared_pal[NUM_SHARED_PALETTES][16];
+static uint8_t palette[256*3];
+static uint8_t __scratch_x("shared_pal") shared_pal[NUM_SHARED_PALETTES][16];
 static int8_t next_pal=-1;
 
 semaphore_t render_frame_ready, display_frame_freed;
@@ -321,12 +321,12 @@ uint8_t display_frame_index;
 uint8_t display_overlay_index;
 uint8_t display_video_type;
 
-typedef void (*scanline_func)(uint32_t *dest, int scanline);
+typedef uint32_t* (*scanline_func)(uint32_t *dest, int scanline);
 
-static void scanline_func_none(uint32_t *dest, int scanline);
-static void scanline_func_double(uint32_t *dest, int scanline);
-static void scanline_func_single(uint32_t *dest, int scanline);
-static void scanline_func_wipe(uint32_t *dest, int scanline);
+static uint32_t* scanline_func_none(uint32_t *dest, int scanline);
+static uint32_t* scanline_func_double(uint32_t *dest, int scanline);
+static uint32_t* scanline_func_single(uint32_t *dest, int scanline);
+static uint32_t* scanline_func_wipe(uint32_t *dest, int scanline);
 
 scanline_func scanline_funcs[] = {
         scanline_func_none,     // VIDEO_TYPE_NONE
@@ -348,13 +348,17 @@ uint8_t *next_video_scroll;
 uint8_t *video_scroll;
 #endif
 volatile uint8_t wipe_min;
+
+#if !PICOVISION
 uint32_t *saved_scanline_buffer_ptrs[PICO_SCANVIDEO_SCANLINE_BUFFER_COUNT];
+#endif
 
 #pragma GCC push_options
 #if PICO_ON_DEVICE
 #pragma GCC optimize("O3")
 #endif
 
+#if !PICOVISION
 static inline void palette_convert_scanline(uint32_t *dest, const uint8_t *src) {
 #if USE_INTERP
     if (interp_updated != 1) {
@@ -393,8 +397,10 @@ static inline void palette_convert_scanline(uint32_t *dest, const uint8_t *src) 
     }
 #endif
 }
-static void scanline_func_none(uint32_t *dest, int scanline) {
-    memset(dest, 0, SCREENWIDTH * 2);
+#endif
+static uint32_t* scanline_func_none(uint32_t *dest, int scanline) {
+    memset(dest, 0, SCREENWIDTH);
+    return NULL;
 }
 
 #if SUPPORT_TEXT
@@ -567,19 +573,24 @@ static void __noinline render_text_mode_scanline(scanvideo_scanline_buffer_t *bu
 }
 #endif
 
-static void __not_in_flash_func(scanline_func_double)(uint32_t *dest, int scanline) {
+static uint32_t* __not_in_flash_func(scanline_func_double)(uint32_t *dest, int scanline) {
     if (scanline < MAIN_VIEWHEIGHT) {
         const uint8_t *src = frame_buffer[display_frame_index] + scanline * SCREENWIDTH;
 //        if (scanline == 100) {
 //            printf("SL %d %p\n", display_frame_index, &frame_buffer[display_frame_index]);
 //        }
+#if !PICOVISION
         palette_convert_scanline(dest, src);
+#else
+        return (uint32_t*)src;
+#endif
     } else {
         // we expect everything to be overdrawn by statusbar so we do nothing
+        return NULL;
     }
 }
 
-static void __not_in_flash_func(scanline_func_single)(uint32_t *dest, int scanline) {
+static uint32_t* __not_in_flash_func(scanline_func_single)(uint32_t *dest, int scanline) {
     uint8_t *src;
     if (scanline < MAIN_VIEWHEIGHT) {
         src = frame_buffer[display_frame_index] + scanline * SCREENWIDTH;
@@ -594,10 +605,14 @@ static void __not_in_flash_func(scanline_func_single)(uint32_t *dest, int scanli
         src[0] = video_scroll[scanline];
     }
 #endif
+#if !PICOVISION
     palette_convert_scanline(dest, src);
+#else
+    return (uint32_t*)src;
+#endif
 }
 
-static void scanline_func_wipe(uint32_t *dest, int scanline) {
+static uint32_t* scanline_func_wipe(uint32_t *dest, int scanline) {
     const uint8_t *src;
 #if 0
     if (scanline < MAIN_VIEWHEIGHT) {
@@ -614,12 +629,12 @@ static void scanline_func_wipe(uint32_t *dest, int scanline) {
         src = frame_buffer[display_frame_index^1] - 32 * SCREENWIDTH;
     }
     assert(wipe_yoffsets && wipe_linelookup);
-    uint16_t *d = (uint16_t *)dest;
+    uint8_t *d = (uint8_t *)dest;
     src += scanline * SCREENWIDTH;
     for (int i = 0; i < SCREENWIDTH; i++) {
         int rel = scanline - wipe_yoffsets[i];
         if (rel < 0) {
-            d[i] = palette[src[i]];
+            d[i] = src[i];
         } else {
             const uint8_t *flip;
 #if PICO_ON_DEVICE
@@ -629,35 +644,44 @@ static void scanline_func_wipe(uint32_t *dest, int scanline) {
 #endif
             // todo better protection here
             if (flip >= &frame_buffer[0][0] && flip < &frame_buffer[0][0] + 2 * SCREENWIDTH * MAIN_VIEWHEIGHT) {
-                d[i] = palette[flip[i]];
+                d[i] = flip[i];
             }
         }
     }
+    return NULL;
 }
 
-static inline uint draw_vpatch(uint16_t *dest, patch_t *patch, vpatchlist_t *vp, uint off) {
+static inline uint draw_vpatch(uint8_t *dest, patch_t *patch, vpatchlist_t *vp, uint off) {
     int repeat = vp->entry.repeat;
     dest += vp->entry.x;
     int w = vpatch_width(patch);
     const uint8_t *data0 = vpatch_data(patch);
     const uint8_t *data = data0 + off;
-    if (!vpatch_has_shared_palette(patch)) {
-        const uint8_t *pal = vpatch_palette(patch);
+    {
+        const uint8_t *pal;
+        if (!vpatch_has_shared_palette(patch)) {
+            pal = vpatch_palette(patch);
+        }
+        else {
+            uint sp = vpatch_shared_palette(patch);
+            pal = shared_pal[sp];
+        }
+
         switch (vpatch_type(patch)) {
             case vp4_runs: {
-                uint16_t *p = dest;
-                uint16_t *pend = dest + w;
+                uint8_t *p = dest;
+                uint8_t *pend = dest + w;
                 uint8_t gap;
                 while (0xff != (gap = *data++)) {
                     p += gap;
                     int len = *data++;
                     for (int i = 1; i < len; i += 2) {
                         uint v = *data++;
-                        *p++ = palette[pal[v & 0xf]];
-                        *p++ = palette[pal[v >> 4]];
+                        *p++ = pal[v & 0xf];
+                        *p++ = pal[v >> 4];
                     }
                     if (len & 1) {
-                        *p++ = palette[pal[(*data++) & 0xf]];
+                        *p++ = pal[(*data++) & 0xf];
                     }
                     assert(p <= pend);
                     if (p == pend) break;
@@ -665,36 +689,36 @@ static inline uint draw_vpatch(uint16_t *dest, patch_t *patch, vpatchlist_t *vp,
                 break;
             }
             case vp4_alpha: {
-                uint16_t *p = dest;
+                uint8_t *p = dest;
                 for (int i = 0; i < w / 2; i++) {
                     uint v = *data++;
-                    if (v & 0xf) p[0] = palette[pal[v & 0xf]];
-                    if (v >> 4) p[1] = palette[pal[v >> 4]];
+                    if (v & 0xf) p[0] = pal[v & 0xf];
+                    if (v >> 4) p[1] = pal[v >> 4];
                     p += 2;
                 }
                 if (w & 1) {
                     uint v = *data++;
-                    if (v & 0xf) p[0] = palette[pal[v & 0xf]];
+                    if (v & 0xf) p[0] = pal[v & 0xf];
                 }
                 break;
             }
             case vp4_solid: {
-                uint16_t *p = dest;
+                uint8_t *p = dest;
                 for (int i = 0; i < w / 2; i++) {
                     uint v = *data++;
-                    p[0] = palette[pal[v & 0xf]];
-                    p[1] = palette[pal[v >> 4]];
+                    p[0] = pal[v & 0xf];
+                    p[1] = pal[v >> 4];
                     p += 2;
                 }
                 if (w & 1) {
                     uint v = *data++;
-                    p[0] = palette[pal[v & 0xf]];
+                    p[0] = pal[v & 0xf];
                 }
                 break;
             }
             case vp6_runs: {
-                uint16_t *p = dest;
-                uint16_t *pend = dest + w;
+                uint8_t *p = dest;
+                uint8_t *pend = dest + w;
                 uint8_t gap;
                 while (0xff != (gap = *data++)) {
                     p += gap;
@@ -703,23 +727,23 @@ static inline uint draw_vpatch(uint16_t *dest, patch_t *patch, vpatchlist_t *vp,
                         uint v = *data++;
                         v |= (*data++) << 8;
                         v |= (*data++) << 16;
-                        *p++ = palette[pal[v & 0x3f]];
-                        *p++ = palette[pal[(v >> 6) & 0x3f]];
-                        *p++ = palette[pal[(v >> 12) & 0x3f]];
-                        *p++ = palette[pal[(v >> 18) & 0x3f]];
+                        *p++ = pal[v & 0x3f];
+                        *p++ = pal[(v >> 6) & 0x3f];
+                        *p++ = pal[(v >> 12) & 0x3f];
+                        *p++ = pal[(v >> 18) & 0x3f];
                     }
                     len &= 3;
                     if (len--) {
                         uint v = *data++;
-                        *p++ = palette[pal[v & 0x3f]];
+                        *p++ = pal[v & 0x3f];
                         if (len--) {
                             v >>= 6;
                             v |= (*data++) << 2;
-                            *p++ = palette[pal[v & 0x3f]];
+                            *p++ = pal[v & 0x3f];
                             if (len--) {
                                 v >>= 6;
                                 v |= (*data++) << 4;
-                                *p++ = palette[pal[v & 0x3f]];
+                                *p++ = pal[v & 0x3f];
                                 assert(!len);
                             }
                         }
@@ -730,14 +754,14 @@ static inline uint draw_vpatch(uint16_t *dest, patch_t *patch, vpatchlist_t *vp,
                 break;
             }
             case vp8_runs: {
-                uint16_t *p = dest;
-                uint16_t *pend = dest + w;
+                uint8_t *p = dest;
+                uint8_t *pend = dest + w;
                 uint8_t gap;
                 while (0xff != (gap = *data++)) {
                     p += gap;
                     int len = *data++;
                     for (int i = 0; i < len; i++) {
-                        *p++ = palette[pal[*data++]];
+                        *p++ = pal[*data++];
                     }
                     assert(p <= pend);
                     if (p == pend) break;
@@ -745,109 +769,18 @@ static inline uint draw_vpatch(uint16_t *dest, patch_t *patch, vpatchlist_t *vp,
                 break;
             }
             case vp_border: {
-                dest[0] = palette[*data++];
-                uint16_t col = palette[*data++];
+                dest[0] = *data++;
+                uint8_t col = *data++;
                 for (int i = 1; i < w - 1; i++) dest[i] = col;
-                dest[w-1] = palette[*data++];
+                dest[w-1] = *data++;
                 break;
             }
             default:
                 assert(false);
                 break;
         }
-    } else {
-        uint sp = vpatch_shared_palette(patch);
-        uint16_t *pal16 = shared_pal[sp];
-        assert(sp < NUM_SHARED_PALETTES);
-        switch (vpatch_type(patch)) {
-            case vp4_solid: {
-#if PICO_ON_DEVICE
-                if (patch == stbar) {
-                    static const uint8_t *cached_data;
-                    static uint32_t __scratch_x("data_cache") data_cache[41];
-                    int i = 0;
-                    uint32_t *d = (uint32_t *) dest;
-#define DMA_CHANNEL 11
-                    if (cached_data == data) {
-                        const uint8_t *source = (const uint8_t *) data_cache;
-                        // we need to correct for the misalignment of data, because the XIP copy ignores the low 2 bits...
-                        // the raw bitmap data is always misaligned by 3 (the size of the header in the case of stbar)
-                        source += 3;
-                        for (; source < (const uint8_t *) dma_hw->ch[DMA_CHANNEL].al1_write_addr; source++) {
-                            uint32_t val = pal16[source[0] & 0xf];
-                            val |= (pal16[source[0] >> 4]) << 16;
-                            *d++ = val;
-                        }
-                        source -= 3;
-                        i = (source - (const uint8_t *) data_cache);
-                    }
-                    if (false) {
-                        //                        once = true;
-                        xip_ctrl_hw->stream_ctr = 0;
-                        // workaround yucky bug
-                        (void) *(io_rw_32 *) XIP_NOCACHE_NOALLOC_BASE;
-                        xip_ctrl_hw->stream_fifo;
-                        dma_channel_abort(DMA_CHANNEL);
-                        dma_channel_config c = dma_channel_get_default_config(DMA_CHANNEL);
-                        channel_config_set_read_increment(&c, false);
-                        channel_config_set_write_increment(&c, true);
-                        channel_config_set_dreq(&c, DREQ_XIP_STREAM);
-                        dma_channel_set_read_addr(DMA_CHANNEL, (void *) XIP_AUX_BASE, false);
-                        dma_channel_set_config(DMA_CHANNEL, &c, false);
-                        cached_data = data + SCREENWIDTH / 2;
-                        xip_ctrl_hw->stream_addr = (uintptr_t) cached_data;
-                        xip_ctrl_hw->stream_ctr = 41;
-                        __compiler_memory_barrier();
-                        dma_channel_transfer_to_buffer_now(DMA_CHANNEL, data_cache, 41);
-                    }
-                    for (; i < SCREENWIDTH / 2; i++) {
-                        uint32_t val = pal16[data[i] & 0xf];
-                        val |= (pal16[data[i] >> 4]) << 16;
-                        *d++ = val;
-                    }
-                    data += SCREENWIDTH / 2;
-                    break; // early break from switch
-                }
-#endif
-                if (((uintptr_t)dest)&3) {
-                    uint16_t *p = dest;
-                    for (int i = 0; i < w / 2; i++) {
-                        uint v = *data++;
-                        p[0] = pal16[v & 0xf];
-                        p[1] = pal16[v >> 4];
-                        p += 2;
-                    }
-                } else {
-                    uint32_t *wide = (uint32_t *) dest;
-                    for (int i = 0; i < w / 2; i++) {
-                        uint v = *data++;
-                        wide[i] = pal16[v & 0xf] | (pal16[v >> 4] << 16);
-                    }
-                }
-                if (w & 1) {
-                    uint v = *data++;
-                    dest[w-1] = pal16[v & 0xf];
-                }
-                break;
-            }
-            case vp4_alpha: {
-                uint16_t *p = dest;
-                for (int i = 0; i < w / 2; i++) {
-                    uint v = *data++;
-                    if (v & 0xf) p[0] = pal16[v & 0xf];
-                    if (v >> 4) p[1] = pal16[v >> 4];
-                    p += 2;
-                }
-                if (w & 1) {
-                    uint v = *data++;
-                    if (v & 0xf) p[0] = pal16[v & 0xf];
-                }
-                break;
-            }
-            default:
-                assert(false);
-        }
-    }
+    } 
+
     if (repeat) {
         // we need them to be solid... which they are, but if not you'll just get some visual funk
         //assert(vpatch_type(patch) == vp4_solid);
@@ -883,6 +816,7 @@ void __noinline new_frame_init_overlays_palette_and_wipe() {
             }
             if (!calculate_palettes || !next_pal) {
                 const uint8_t *doompalette = playpal + next_pal * 768;
+                uint8_t* palette_ptr = palette;
                 for (int i = 0; i < 256; i++) {
                     int r = *doompalette++;
                     int g = *doompalette++;
@@ -892,7 +826,9 @@ void __noinline new_frame_init_overlays_palette_and_wipe() {
                         g = gammatable[usegamma-1][g];
                         b = gammatable[usegamma-1][b];
                     }
-                    palette[i] = PIXEL_FROM_RGB8(r, g, b);
+                    *palette_ptr++ = r;
+                    *palette_ptr++ = g;
+                    *palette_ptr++ = b;
                 }
             } else {
                 int mul, r0, g0, b0;
@@ -907,6 +843,7 @@ void __noinline new_frame_init_overlays_palette_and_wipe() {
                     r0 = b0 = 0; g0 = 256;
                 }
                 const uint8_t *doompalette = playpal;
+                uint8_t* palette_ptr = palette;
                 for (int i = 0; i < 256; i++) {
                     int r = *doompalette++;
                     int g = *doompalette++;
@@ -914,7 +851,9 @@ void __noinline new_frame_init_overlays_palette_and_wipe() {
                     r += ((r0 - r) * mul) >> 16;
                     g += ((g0 - g) * mul) >> 16;
                     b += ((b0 - b) * mul) >> 16;
-                    palette[i] = PIXEL_FROM_RGB8(r, g, b);
+                    *palette_ptr++ = r;
+                    *palette_ptr++ = g;
+                    *palette_ptr++ = b;
                 }
             }
             next_pal = -1;
@@ -924,7 +863,7 @@ void __noinline new_frame_init_overlays_palette_and_wipe() {
                 assert(vpatch_colorcount(patch) <= 16);
                 assert(vpatch_has_shared_palette(patch));
                 for (int j = 0; j < 16; j++) {
-                    shared_pal[i][j] = palette[vpatch_palette(patch)[j]];
+                    shared_pal[i][j] = vpatch_palette(patch)[j];
                 }
             }
         }
@@ -987,7 +926,7 @@ bool __no_inline_not_in_flash_func(new_frame_stuff)() {
 }
 
 #if PICOVISION
-static uint32_t scanline_buffer[SCREENWIDTH/2];
+static uint32_t scanline_buffer[SCREENWIDTH/4];
 static int16_t picovision_last_scanline = SCREENHEIGHT-1;
 #endif
 
@@ -1039,6 +978,7 @@ void __scratch_x("scanlines") fill_scanlines() {
                 picovision_notify_next_vsync();
                 return;
             }
+            picovision_write_palette(palette);
             last_frame_number = frame;
         }
 
@@ -1054,7 +994,7 @@ void __scratch_x("scanlines") fill_scanlines() {
 #if !PICOVISION
             assert (buffer->data < text_scanline_buffer_start || buffer->data >= text_scanline_buffer_start + TEXT_SCANLINE_BUFFER_TOTAL_WORDS);
 #endif
-            scanline_funcs[display_video_type](data_buffer, scanline);
+            uint32_t* direct_buffer = scanline_funcs[display_video_type](data_buffer, scanline);
             if (display_video_type >= FIRST_VIDEO_TYPE_WITH_OVERLAYS) {
                 assert(scanline < count_of(vpatchlists->vpatch_starters));
                 int prev = 0;
@@ -1076,13 +1016,20 @@ void __scratch_x("scanlines") fill_scanlines() {
                     patch_t *patch = resolve_vpatch_handle(overlays[vp].entry.patch_handle);
                     int yoff = scanline - overlays[vp].entry.y;
                     if (yoff < vpatch_height(patch)) {
-                        vpatchlists->vpatch_doff[vp] = draw_vpatch((uint16_t*)(data_buffer), patch, &overlays[vp],
+                        if (direct_buffer) {
+                            memcpy(data_buffer, direct_buffer, SCREENWIDTH);
+                            direct_buffer = NULL;
+                        }
+                        vpatchlists->vpatch_doff[vp] = draw_vpatch((uint8_t*)(data_buffer), patch, &overlays[vp],
                                                                    vpatchlists->vpatch_doff[vp]);
                         prev = vp;
                     } else {
                         vpatchlists->vpatch_next[prev] = vpatchlists->vpatch_next[vp];
                     }
                 }
+            }
+            if (direct_buffer) {
+                data_buffer = direct_buffer;
             }
 #if !PICOVISION
             uint16_t *p = (uint16_t *) buffer->data;
@@ -1098,7 +1045,7 @@ void __scratch_x("scanlines") fill_scanlines() {
 #if SUPPORT_TEXT
             render_text_mode_scanline(buffer, scanline);
 #else
-            memset(data_buffer, 0, SCREENWIDTH * 2);
+            memset(data_buffer, 0, SCREENWIDTH);
 #if !PICOVISION
             p[0] = video_doom_offset_raw_run;
             p[1] = p[2];
