@@ -31,6 +31,7 @@
 #include "pico/multicore.h"
 #if PICO_ON_DEVICE
 #include "hardware/vreg.h"
+#include "hardware/structs/systick.h"
 #endif
 #endif
 #if USE_PICO_NET
@@ -64,6 +65,9 @@ int main(int argc, char **argv)
     vreg_set_voltage(VREG_VOLTAGE_1_30);
     sleep_ms(1);
     set_sys_clock_khz(266000, true);
+
+    systick_hw->rvr = 0xffffff;
+    systick_hw->csr = 5;
 #if !USE_PICO_NET
     // debug ?
 //    gpio_debug_pins_init();

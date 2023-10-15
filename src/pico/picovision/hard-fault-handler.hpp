@@ -1,5 +1,6 @@
 #include <string.h>
 #include "hardware/gpio.h"
+#include "hardware/structs/systick.h"
 
 namespace ramshim {
 
@@ -75,10 +76,19 @@ extern "C"
   // - pc (r15)     - address of faulting instruction (return address)
   // - xPSR
 
+#define HF_PERF_COUNTER 0
+#define ENABLE_HF_PROFILE 0
+
 #if 1
   void __not_in_flash_func(isr_hardfault)()
   {
     asm(
+#if HF_PERF_COUNTER
+      "ldr r0, =0xe000e000\n"
+      "movs r1, #0\n"
+      "str r1, [r0, #0x18]\n"  // Start perf counter
+#endif
+
       // put the stack pointer into r0, this points at the standard fault stack
       "mrs r0, msp\n"
 
@@ -119,7 +129,9 @@ extern "C"
 
   // stm         11000 nnnrrrrrrrr
 
-  #define ENABLE_HF_PROFILE 0
+#if HF_PERF_COUNTER
+  uint32_t ticks_in_hf = 0;
+#endif
 
   #define NUM_PROFILE_ENTRIES 400
   struct profile_entry {
@@ -150,6 +162,10 @@ extern "C"
   }
 
   void picovision_print_profile() {
+#if HF_PERF_COUNTER
+    printf("Time in hf: %lu\n", ticks_in_hf / 266);
+    ticks_in_hf = 0;
+#endif
 #if ENABLE_HF_PROFILE
     gpio_init(9);
     gpio_set_pulls(9, true, false);
@@ -183,6 +199,10 @@ extern "C"
       int32_t *t = (int32_t *)ramshim::srctar(ins, stack);
       // printf("ldrsb (reg): ");
       *t = ramshim::_cache.s8(a);
+
+#if HF_PERF_COUNTER
+      ticks_in_hf += 0x1000000 - systick_hw->cvr;
+#endif
       return;
     }
 
@@ -220,6 +240,10 @@ extern "C"
       // printf("ldrsh (reg): ");
       *t = ramshim::_cache.s16(a);
     }
+
+#if HF_PERF_COUNTER
+    ticks_in_hf += 0x1000000 - systick_hw->cvr;
+#endif
   }
 
   void __not_in_flash_func(hard_fault_ldr_imm)(uint32_t *stack, const uint16_t ins)
@@ -239,6 +263,10 @@ extern "C"
     uint32_t *t = ramshim::srctar(ins, stack);
     //printf("ldr (imm) 0x%08x\n", a);
     *t = ramshim::_cache.u32(a);
+
+#if HF_PERF_COUNTER
+    ticks_in_hf += 0x1000000 - systick_hw->cvr;
+#endif
   }
 
   void __not_in_flash_func(hard_fault_ldrh_imm)(uint32_t *stack, const uint16_t ins)
@@ -258,6 +286,10 @@ extern "C"
     uint32_t *t = ramshim::srctar(ins, stack);
     //printf("ldr (imm) 0x%08x\n", a);
     *t = ramshim::_cache.u16(a);
+
+#if HF_PERF_COUNTER
+    ticks_in_hf += 0x1000000 - systick_hw->cvr;
+#endif
   }
 
   void __not_in_flash_func(hard_fault_ldrb_imm)(uint32_t *stack, const uint16_t ins)
@@ -277,6 +309,10 @@ extern "C"
     uint32_t *t = ramshim::srctar(ins, stack);
     //printf("ldr (imm) 0x%08x\n", a);
     *t = ramshim::_cache.u8(a);
+
+#if HF_PERF_COUNTER
+    ticks_in_hf += 0x1000000 - systick_hw->cvr;
+#endif
   }
 
   void __not_in_flash_func(hard_fault_ldm)(uint32_t *stack, const uint16_t ins)
@@ -308,6 +344,10 @@ extern "C"
     }
 
     stack[ramshim::PC] += 2;
+
+#if HF_PERF_COUNTER
+    ticks_in_hf += 0x1000000 - systick_hw->cvr;
+#endif
   }
 
   typedef void (*handler_func)(uint32_t *stack, const uint16_t ins);

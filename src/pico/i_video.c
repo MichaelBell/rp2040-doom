@@ -45,6 +45,7 @@
 
 #if PICOVISION
 #include "picovision/picovision.h"
+#include "hardware/structs/systick.h"
 #else
 #include "pico/scanvideo.h"
 #include "pico/scanvideo/composable_scanline.h"
@@ -144,7 +145,7 @@ static uint8_t palette[256*3];
 static uint8_t __scratch_x("shared_pal") shared_pal[NUM_SHARED_PALETTES][16];
 static int8_t next_pal=-1;
 
-semaphore_t render_frame_ready, display_frame_freed;
+semaphore_t render_frame_ready, display_frame_freed, xfer_frame;
 semaphore_t core1_launch;
 
 uint8_t *text_screen_data;
@@ -806,7 +807,14 @@ static inline uint draw_vpatch(uint8_t *dest, patch_t *patch, vpatchlist_t *vp, 
 
 // this is not in flash as quite large and only once per frame
 void __noinline new_frame_init_overlays_palette_and_wipe() {
+#if 0
     picovision_print_profile();
+
+    static absolute_time_t frame_time;
+    absolute_time_t cur_time = get_absolute_time();
+    printf("Frame us: %lld\n", absolute_time_diff_us(frame_time, cur_time));
+    frame_time = cur_time;
+#endif
 
     // re-initialize our overlay drawing
     if (display_video_type >= FIRST_VIDEO_TYPE_WITH_OVERLAYS) {
@@ -925,7 +933,7 @@ bool __no_inline_not_in_flash_func(new_frame_stuff)() {
 #if !DEMO1_ONLY
         video_scroll = next_video_scroll; // todo does this waste too much space
 #endif
-        sem_release(&display_frame_freed);
+        //sem_release(&display_frame_freed);
     } else {
 #if !DEMO1_ONLY
         video_scroll = NULL;
@@ -935,7 +943,6 @@ bool __no_inline_not_in_flash_func(new_frame_stuff)() {
         // this stuff is large (so in flash) and not needed in save mode
         new_frame_init_overlays_palette_and_wipe();
     }
-
     return frame_ready;
 }
 
@@ -958,7 +965,9 @@ void __scratch_x("scanlines") fill_scanlines() {
     if (++picovision_last_scanline == SCREENHEIGHT) {
         ++frame;
         picovision_last_scanline = -1;
+        //printf("Flip start\n");
         picovision_flip();
+        sem_release(&display_frame_freed);
         return;
     }
 
@@ -987,11 +996,16 @@ void __scratch_x("scanlines") fill_scanlines() {
         int scanline = picovision_last_scanline;
 #endif
         if ((int8_t) frame != last_frame_number) {
-            if (!new_frame_stuff() || display_video_type == VIDEO_TYPE_SAVING) {
+            bool frame_ready = new_frame_stuff();
+            if (!frame_ready || display_video_type == VIDEO_TYPE_SAVING) {
                 picovision_last_scanline = -1;
+                if (frame_ready) {
+                    sem_release(&display_frame_freed);
+                }
                 picovision_notify_next_vsync();
                 return;
             }
+            //if (!frame_ready) panic("Frame not ready");
             picovision_write_palette(palette);
             last_frame_number = frame;
         }
@@ -1092,12 +1106,27 @@ void __scratch_x("scanlines") fill_scanlines() {
 
 #if PICO_ON_DEVICE
 #define LOW_PRIO_IRQ 31
+#define LOW_PRIO_IRQ2 30
 #include "hardware/irq.h"
 
 static void __not_in_flash_func(free_buffer_callback)() {
 //    irq_set_pending(LOW_PRIO_IRQ);
     // ^ is in flash by default
     *((io_rw_32 *) (PPB_BASE + M0PLUS_NVIC_ISPR_OFFSET)) = 1u << LOW_PRIO_IRQ;
+}
+
+static void __not_in_flash_func(start_next_frame)() {
+//    irq_set_pending(LOW_PRIO_IRQ);
+    // ^ is in flash by default
+    //printf("Flip done\n");
+    sem_release(&xfer_frame);
+}
+
+static void __not_in_flash_func(start_next_frame2)() {
+//    irq_set_pending(LOW_PRIO_IRQ);
+    // ^ is in flash by default
+    //printf("Flip done\n");
+    fill_scanlines();
 }
 #endif
 
@@ -1121,21 +1150,29 @@ static void core1() {
     irq_set_pending(LOW_PRIO_IRQ);
 #endif
 #else
-    irq_set_exclusive_handler(LOW_PRIO_IRQ, fill_scanlines);
+    systick_hw->rvr = 0xffffff;
+    systick_hw->csr = 5;
+
+    irq_set_exclusive_handler(LOW_PRIO_IRQ, start_next_frame);
     irq_set_enabled(LOW_PRIO_IRQ, true);
+    irq_set_exclusive_handler(LOW_PRIO_IRQ2, start_next_frame2);
+    irq_set_enabled(LOW_PRIO_IRQ2, true);
     irq_set_exclusive_handler(DMA_IRQ_0, fill_scanlines);
     irq_set_enabled(DMA_IRQ_0, true);
     picovision_init();
 #endif
     sem_release(&core1_launch);
 #if PICOVISION
-    fill_scanlines();
+    //fill_scanlines();
 #endif
     while (true) {
         pd_core1_loop();
 #if PICO_ON_DEVICE
         //printf("%d\n", picovision_last_scanline);
-        tight_loop_contents();
+        //tight_loop_contents();
+        sem_acquire_blocking(&xfer_frame);
+        //printf("Frame start\n");
+        fill_scanlines();
 #else
         fill_scanlines();
 #endif
@@ -1148,6 +1185,7 @@ void I_InitGraphics(void)
     sem_init(&render_frame_ready, 0, 2);
     sem_init(&display_frame_freed, 1, 2);
     sem_init(&core1_launch, 0, 1);
+    sem_init(&xfer_frame, 1, 1);
     pd_init();
     multicore_launch_core1(core1);
     // wait for core1 launch as it may do malloc and we have no mutex around that

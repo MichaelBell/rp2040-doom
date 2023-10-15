@@ -3037,6 +3037,7 @@ void pd_start_save_pause(void) {
         draw_stbar_on_framebuffer(render_frame_index ^ 1, false);
     }
     next_video_type = VIDEO_TYPE_SAVING;
+    picovision_notify_next_vsync();
     sem_release(&render_frame_ready);
     // need to be sure we've picked up the change
     while (!sem_available(&display_frame_freed)) {

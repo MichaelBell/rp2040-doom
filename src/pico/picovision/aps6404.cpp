@@ -263,8 +263,8 @@ namespace pimoroni {
             last_cmd_was_write = true;
             wait_for_finish_blocking();
             dma_channel_set_write_addr(dma_channel, &pio->txf[pio_sm], false);
-            dma_hw->ch[dma_channel].al1_ctrl = write_config.ctrl;
         }
+        dma_hw->ch[dma_channel].al1_ctrl = write_config.ctrl;
 
         if (!page_smashing_ok) {
             write_no_page_crossing(addr, data, len_in_bytes);

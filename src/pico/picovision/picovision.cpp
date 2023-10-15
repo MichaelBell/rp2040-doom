@@ -68,6 +68,7 @@ static uint8_t bank = 0;
 
 // Used to re-trigger scanline fill
 #define LOW_PRIO_IRQ 31
+#define LOW_PRIO_IRQ2 30
 
   static void __not_in_flash_func(vsync_callback)() {
     if (gpio_get_irq_event_mask(VSYNC) & GPIO_IRQ_EDGE_RISE) {
@@ -81,8 +82,8 @@ static uint8_t bank = 0;
         gpio_xor_mask(1 << RAM_SEL);
 
         enable_switch_on_vsync = false;
-        enable_notify_on_vsync = false;
-        *((io_rw_32 *) (PPB_BASE + M0PLUS_NVIC_ISPR_OFFSET)) = 1u << LOW_PRIO_IRQ;
+        if (!enable_notify_on_vsync)
+          *((io_rw_32 *) (PPB_BASE + M0PLUS_NVIC_ISPR_OFFSET)) = 1u << LOW_PRIO_IRQ;
 
         // Give the RAM MUX a chance to stabilize
         for (int i = 0; i < 10; ++i) {
@@ -91,9 +92,9 @@ static uint8_t bank = 0;
 
         critical_section_exit(&ram.mutex);
       }
-      else if (enable_notify_on_vsync) {
+      if (enable_notify_on_vsync) {
         enable_notify_on_vsync = false;
-        *((io_rw_32 *) (PPB_BASE + M0PLUS_NVIC_ISPR_OFFSET)) = 1u << LOW_PRIO_IRQ;
+        *((io_rw_32 *) (PPB_BASE + M0PLUS_NVIC_ISPR_OFFSET)) = 1u << LOW_PRIO_IRQ2;
       }
     }
   }
@@ -234,14 +235,6 @@ void picovision_init()
 
 void __not_in_flash_func(picovision_write_line)(int y, uint32_t* data)
 {
-    // TODO
-    #if 0
-    while (enable_switch_on_vsync) {
-      // Waiting for IRQ handler to do flip.
-      ;
-    }
-    #endif
-
     uint32_t addr = BASE_ADDRESS + y * 1024;
     ram.write_fast_irq(addr, data, 320);
 }
@@ -249,13 +242,7 @@ void __not_in_flash_func(picovision_write_line)(int y, uint32_t* data)
 void __not_in_flash_func(picovision_flip)()
 {
     bank ^= 1;
-    ram.wait_for_finish_blocking();
-
     enable_switch_on_vsync = true;
-
-    // TODO
-    //while (gpio_get(VSYNC) == 0);
-    //gpio_xor_mask(1 << RAM_SEL);    
 }
 
 void __not_in_flash_func(picovision_notify_next_vsync)()

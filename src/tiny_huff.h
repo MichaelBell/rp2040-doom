@@ -7,6 +7,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <string.h>
 #include <assert.h>
 typedef unsigned int uint;
 
@@ -56,6 +57,16 @@ typedef struct {
     uint8_t bits;
 } th_backwards_bit_input;
 
+#if PICOVISION
+static inline void th_read_bytes(const uint8_t* addr, uint8_t* buf, uint32_t len) {
+    if (((uintptr_t)addr & 0xFF000000) == 0x2F000000) {
+        picovision_read_bytes_from_cache(addr, buf, len);
+    }
+    else {
+        memcpy(buf, addr, len);
+    }
+}
+#endif
 
 static inline void th_bit_input_init(th_bit_input *bi, const uint8_t *data) {
     bi->cur = data;
@@ -64,7 +75,7 @@ static inline void th_bit_input_init(th_bit_input *bi, const uint8_t *data) {
 #endif
 #if TH_USE_ACCUM
 #if PICOVISION
-    picovision_read_bytes_from_cache(data, bi->buf, TH_BUF_SIZE);
+    th_read_bytes(data, bi->buf, TH_BUF_SIZE);
     bi->idx = 0;
 #endif
     bi->accum = 0;
@@ -81,7 +92,7 @@ static inline void th_sized_bit_input_init(th_bit_input *bi, const uint8_t *data
 #endif
 #if TH_USE_ACCUM
 #if PICOVISION
-    picovision_read_bytes_from_cache(data, bi->buf, TH_BUF_SIZE);
+    th_read_bytes(data, bi->buf, TH_BUF_SIZE);
     bi->idx = 0;
 #endif
     bi->accum = 0;
@@ -98,7 +109,7 @@ static inline void th_bit_input_init_bit_offset(th_bit_input *bi, const uint8_t 
 #endif
 #if TH_USE_ACCUM
 #if PICOVISION
-    picovision_read_bytes_from_cache(bi->cur, bi->buf, TH_BUF_SIZE);
+    th_read_bytes(bi->cur, bi->buf, TH_BUF_SIZE);
     bi->idx = 1;
     bi->accum = bi->buf[0] >> (bit_offset & 7);
 #else
@@ -117,7 +128,7 @@ static inline void th_sized_bit_input_init_bit_offset(th_bit_input *bi, const ui
 #endif
 #if TH_USE_ACCUM
 #if PICOVISION
-    picovision_read_bytes_from_cache(bi->cur, bi->buf, TH_BUF_SIZE);
+    th_read_bytes(bi->cur, bi->buf, TH_BUF_SIZE);
     bi->idx = 1;
     bi->accum = bi->buf[0] >> (bit_offset & 7);
 #else
@@ -156,7 +167,7 @@ static inline int th_bit(th_bit_input *bi) {
 #if PICOVISION
         if (bi->idx == TH_BUF_SIZE) {
             bi->cur += TH_BUF_SIZE;
-            picovision_read_bytes_from_cache(bi->cur, bi->buf, TH_BUF_SIZE);
+            th_read_bytes(bi->cur, bi->buf, TH_BUF_SIZE);
             bi->idx = 0;
         }
         bi->accum = bi->buf[bi->idx++];
@@ -192,7 +203,7 @@ static inline void th_fill_byte(th_bit_input *bi) {
 #if PICOVISION
         if (bi->idx == TH_BUF_SIZE) {
             bi->cur += TH_BUF_SIZE;
-            picovision_read_bytes_from_cache(bi->cur, bi->buf, TH_BUF_SIZE);
+            th_read_bytes(bi->cur, bi->buf, TH_BUF_SIZE);
             bi->idx = 0;
         }
         bi->accum |= bi->buf[bi->idx++] << bi->bits;
