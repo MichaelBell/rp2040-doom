@@ -267,3 +267,21 @@ void __not_in_flash_func(picovision_ack_dma)()
 {
     ram.ack_dma_irq();
 }
+
+uint8_t __not_in_flash_func(picovision_read_byte_from_cache)(const uint8_t* addr)
+{
+  if (((uintptr_t)addr & 0xFF000000) != 0x2F000000) __breakpoint();
+  return ramshim::_cache.u8((uintptr_t)addr);
+}
+
+void __not_in_flash_func(picovision_read_bytes_from_cache)(const uint8_t* addr, uint8_t* buf, uint32_t len)
+{
+  if (((uintptr_t)addr & 0xFF000000) != 0x2F000000) __breakpoint();
+  ramshim::_cache.read_bytes((uintptr_t)addr, buf, len);
+}
+
+void __not_in_flash_func(picovision_read_bytes)(const uint8_t* addr, uint8_t* buf, uint32_t len)
+{
+  if (((uintptr_t)addr & 0xFF000000) != 0x2F000000) __breakpoint();
+  ramshim::_cache.read_bytes_uncached((uintptr_t)addr, buf, len);
+}

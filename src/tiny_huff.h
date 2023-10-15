@@ -2,6 +2,10 @@
 extern "C" {
 #endif
 
+#if PICOVISION
+#include "pico/picovision/picovision.h"
+#endif
+
 #include <stdint.h>
 #include <assert.h>
 typedef unsigned int uint;
@@ -24,12 +28,21 @@ typedef const uint16_t *th_decoder;
 #define TH_USE_ACCUM 1
 #endif
 
+#if PICOVISION
+#define TH_BUF_SIZE 16
+#endif
+
 typedef struct {
     const uint8_t *cur;
 #ifndef NDEBUG
     const uint8_t *end;
 #endif
-#if TH_USE_ACCUM
+#if PICOVISION
+    uint8_t buf[TH_BUF_SIZE];
+    uint8_t idx;
+    uint8_t bits;
+    uint32_t accum;
+#elif TH_USE_ACCUM
     uint32_t accum;
     uint8_t bits;
 #else
@@ -50,6 +63,10 @@ static inline void th_bit_input_init(th_bit_input *bi, const uint8_t *data) {
     bi->end = 0;
 #endif
 #if TH_USE_ACCUM
+#if PICOVISION
+    picovision_read_bytes_from_cache(data, bi->buf, TH_BUF_SIZE);
+    bi->idx = 0;
+#endif
     bi->accum = 0;
     bi->bits = 0;
 #else
@@ -63,6 +80,10 @@ static inline void th_sized_bit_input_init(th_bit_input *bi, const uint8_t *data
     bi->end = data + size;
 #endif
 #if TH_USE_ACCUM
+#if PICOVISION
+    picovision_read_bytes_from_cache(data, bi->buf, TH_BUF_SIZE);
+    bi->idx = 0;
+#endif
     bi->accum = 0;
     bi->bits = 0;
 #else
@@ -76,8 +97,14 @@ static inline void th_bit_input_init_bit_offset(th_bit_input *bi, const uint8_t 
     bi->end = 0;
 #endif
 #if TH_USE_ACCUM
-    bi->bits = 8 - (bit_offset & 7);
+#if PICOVISION
+    picovision_read_bytes_from_cache(bi->cur, bi->buf, TH_BUF_SIZE);
+    bi->idx = 1;
+    bi->accum = bi->buf[0] >> (bit_offset & 7);
+#else
     bi->accum = *bi->cur++ >> (bit_offset & 7);
+#endif
+    bi->bits = 8 - (bit_offset & 7);
 #else
     bi->bit = 0;
 #endif
@@ -89,8 +116,14 @@ static inline void th_sized_bit_input_init_bit_offset(th_bit_input *bi, const ui
     bi->end = data + size - bit_offset / 8;
 #endif
 #if TH_USE_ACCUM
-    bi->bits = 8 - (bit_offset & 7);
+#if PICOVISION
+    picovision_read_bytes_from_cache(bi->cur, bi->buf, TH_BUF_SIZE);
+    bi->idx = 1;
+    bi->accum = bi->buf[0] >> (bit_offset & 7);
+#else
     bi->accum = *bi->cur++ >> (bit_offset & 7);
+#endif
+    bi->bits = 8 - (bit_offset & 7);
 #else
     bi->bit = 0;
 #endif
@@ -105,7 +138,11 @@ static inline void th_backwards_bit_input_init(th_backwards_bit_input *bi, const
 static inline void th_backwards_bit_input_init_bit_offset(th_backwards_bit_input *bi, const uint8_t *data, uint bit_offset) {
     bi->cur = data + bit_offset / 8;
     bi->bits = bit_offset & 7u;
+#if PICOVISION
+    bi->accum = picovision_read_byte_from_cache(bi->cur) & ((1u << bi->bits)-1);
+#else
     bi->accum = *bi->cur & ((1u << bi->bits)-1); // if we start on a non byte boundary, then the bits are in the wrong place
+#endif
 }
 
 void th_bit_overrun(th_bit_input *bi); // global and user provided
@@ -116,7 +153,16 @@ static inline int th_bit(th_bit_input *bi) {
 #ifndef NDEBUG
         if (bi->cur == bi->end) th_bit_overrun(bi);
 #endif
+#if PICOVISION
+        if (bi->idx == TH_BUF_SIZE) {
+            bi->cur += TH_BUF_SIZE;
+            picovision_read_bytes_from_cache(bi->cur, bi->buf, TH_BUF_SIZE);
+            bi->idx = 0;
+        }
+        bi->accum = bi->buf[bi->idx++];
+#else
         bi->accum = *bi->cur++;
+#endif
         bi->bits = 8;
     }
     bi->bits--;
@@ -143,7 +189,16 @@ static inline void th_fill_byte(th_bit_input *bi) {
 #ifndef NDEBUG
         if (bi->cur == bi->end) th_bit_overrun(bi);
 #endif
+#if PICOVISION
+        if (bi->idx == TH_BUF_SIZE) {
+            bi->cur += TH_BUF_SIZE;
+            picovision_read_bytes_from_cache(bi->cur, bi->buf, TH_BUF_SIZE);
+            bi->idx = 0;
+        }
+        bi->accum |= bi->buf[bi->idx++] << bi->bits;
+#else
         bi->accum |= *bi->cur++ << bi->bits;
+#endif
         bi->bits += 8;
 //    }
 }
@@ -190,7 +245,11 @@ static inline uint th_read_backwards_bits(th_backwards_bit_input *bi, uint n) {
     assert(n<=32);
     bi->bits -= n;
     while (bi->bits > 32) { // really negative
+#if PICOVISION
+        bi->accum = (bi->accum << 8) | picovision_read_byte_from_cache(--bi->cur);
+#else
         bi->accum = (bi->accum << 8) | *--bi->cur;
+#endif
         bi->bits += 8;
     }
     uint tmp = bi->accum >> bi->bits;

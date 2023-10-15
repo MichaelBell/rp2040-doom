@@ -40,6 +40,8 @@
 // Data.
 #include "sounds.h"
 
+#include "pico/picovision/picovision.h"
+
 // Spechit overrun magic value.
 //
 // This is the value used by PrBoom-plus.  I think the value below is 
@@ -200,8 +202,16 @@ static void SpechitOverrun(line_t *ld);
 // PIT_CheckLine
 // Adjusts tmfloorz and tmceilingz as lines are contacted
 //
-boolean PIT_CheckLine (line_t* ld)
+boolean PIT_CheckLine (line_t* ld_src)
 {
+#if PICOVISION
+    line_t ld_cache;
+    picovision_read_bytes_from_cache((uint8_t*)ld_src, (uint8_t*)&ld_cache, sizeof(ld_cache));
+    line_t* ld = &ld_cache;
+#else
+    line_t* ld = ld_src;
+#endif
+
 #if !USE_RAW_MAPLINEDEF
     if (tmbbox[BOXRIGHT] <= ld->bbox[BOXLEFT]
 	|| tmbbox[BOXLEFT] >= ld->bbox[BOXRIGHT]
@@ -260,15 +270,15 @@ boolean PIT_CheckLine (line_t* ld)
 	tmdropoffz = lowfloor;
 		
     // if contacted a special line, add it to the list
-    if (line_special(ld))
+    if (line_special(ld_src))
     {
-        spechit[numspechit] = ld;
+        spechit[numspechit] = ld_src;
 	numspechit++;
 
         // fraggle: spechits overrun emulation code from prboom-plus
         if (numspechit > MAXSPECIALCROSS_ORIGINAL)
         {
-            SpechitOverrun(ld);
+            SpechitOverrun(ld_src);
         }
     }
 

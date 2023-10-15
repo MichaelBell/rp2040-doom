@@ -1,5 +1,3 @@
-#include <unordered_map>
-#include <queue>
 #include <cstdint>
 #include <math.h>
 
@@ -128,6 +126,44 @@ namespace ramshim {
       critical_section_exit(&_crit);
       return r;
     }
+
+    __always_inline void read_bytes(uint32_t a, uint8_t* buf, uint32_t len) {
+      critical_section_enter_blocking(&_crit);
+
+      auto* page = fetch_page(a);
+      uint8_t* data = &page->data[address_to_offset(a)];
+
+      while (len--) {
+        if (address_to_id(a) != page->id) {
+          page = fetch_page(a);
+          data = page->data;
+        }
+        *buf++ = *data++;
+        ++a;
+      }
+
+      critical_section_exit(&_crit);
+    }
+
+    __always_inline void read_bytes_uncached(uint32_t a, uint8_t* buf, uint32_t len) {
+      uint8_t __aligned(4) read_buf[_page_size];
+
+      uint32_t id = address_to_id(a);
+      read_page(id, (uint32_t*)read_buf, _page_size >> 2);
+
+      uint8_t* data = &read_buf[address_to_offset(a)];
+
+      while (len--) {
+        if (address_to_id(a) != id) {
+          id = address_to_id(a);
+          read_page(id, (uint32_t*)read_buf, _page_size >> 2);
+          data = read_buf;
+        }
+        *buf++ = *data++;
+        ++a;
+      }
+   }
+
   };
 
 }

@@ -1538,6 +1538,9 @@ static void draw_visplanes(int16_t fr_list) {
     }
 }
 
+static lighttable_t colormap_cache[2][256];
+static const lighttable_t* cached_map[2] = {0};
+
 static inline void col_render(uint8_t *dest, uint count, const uint8_t *source, fixed_t frac, fixed_t fracstep, const lighttable_t* colormap) {
 #if 0 && PICO_ON_DEVICE
     col_interp->accum[0] = xs->col.frac;
@@ -1580,11 +1583,25 @@ static inline void col_render(uint8_t *dest, uint count, const uint8_t *source, 
     );
     xs->col.frac = col_interp->accum[0];
 #else
+#if PICOVISION
+    const uint core = get_core_num();
+    lighttable_t* cache = colormap_cache[core];
+    if (cache != cached_map[core]) {
+        picovision_read_bytes(colormap, cache, 256);
+        cached_map[core] = colormap;
+    }
+    do {
+        *dest = cache[source[(frac >> FRACBITS) & 127]];
+        dest += SCREENWIDTH;
+        frac += fracstep;
+    } while (count--);
+#else
     do {
         *dest = colormap[source[(frac >> FRACBITS) & 127]];
         dest += SCREENWIDTH;
         frac += fracstep;
     } while (count--);
+#endif
 #endif
 }
 
