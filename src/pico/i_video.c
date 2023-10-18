@@ -141,6 +141,8 @@ unsigned int joywait = 0;
 pixel_t *I_VideoBuffer; // todo can't have this
 
 uint8_t __aligned(4) frame_buffer[SCREENWIDTH*SCREENHEIGHT];
+uint8_t* wipe_frame = (uint8_t*)0x2f070000;
+int8_t wipe_starting;
 static uint8_t palette[256*3];
 static uint8_t __scratch_x("shared_pal") shared_pal[NUM_SHARED_PALETTES][16];
 static int8_t next_pal=-1;
@@ -339,7 +341,6 @@ scanline_func scanline_funcs[] = {
 
 uint8_t *wipe_yoffsets; // position of start of y in each column
 int16_t *wipe_yoffsets_raw;
-uint32_t *wipe_linelookup; // offset of each line from start of screenbuffer (can be negative for FB 1 to FB 0)
 uint8_t next_video_type;
 uint8_t next_overlay_index;
 #if !DEMO1_ONLY
@@ -617,7 +618,7 @@ static uint32_t* scanline_func_wipe(uint32_t *dest, int scanline) {
     palette_convert_scanline(dest, src);
     return;
 #endif
-    assert(wipe_yoffsets && wipe_linelookup);
+    assert(wipe_yoffsets);
     uint8_t *d = (uint8_t *)dest;
     src += scanline * SCREENWIDTH;
     for (int i = 0; i < SCREENWIDTH; i++) {
@@ -625,15 +626,10 @@ static uint32_t* scanline_func_wipe(uint32_t *dest, int scanline) {
         if (rel < 0) {
             d[i] = src[i];
         } else {
-            const uint8_t *flip;
-#if PICO_ON_DEVICE
-            flip = (const uint8_t *)wipe_linelookup[rel];
-#else
-            flip = &frame_buffer[0][0] + wipe_linelookup[rel];
-#endif
+            const uint8_t *flip = wipe_frame + rel * SCREENWIDTH;
             // todo better protection here
-            if (flip >= &frame_buffer[0] && flip < &frame_buffer[0] + SCREENWIDTH * SCREENHEIGHT) {
-                d[i] = flip[i];
+            if (flip >= wipe_frame && flip < wipe_frame + SCREENWIDTH * SCREENHEIGHT) {
+                d[i] = picovision_read_byte_from_cache(&flip[i]);
             }
         }
     }
@@ -920,7 +916,6 @@ bool __no_inline_not_in_flash_func(new_frame_stuff)() {
 #if !DEMO1_ONLY
         video_scroll = next_video_scroll; // todo does this waste too much space
 #endif
-        //sem_release(&display_frame_freed);
     } else {
 #if !DEMO1_ONLY
         video_scroll = NULL;
@@ -954,7 +949,9 @@ void __scratch_x("scanlines") fill_scanlines() {
         picovision_last_scanline = -1;
         //printf("Flip start\n");
         picovision_flip();
-        sem_release(&display_frame_freed);
+        if (!wipe_starting) {
+            sem_release(&display_frame_freed);
+        }
         return;
     }
 
@@ -1106,6 +1103,11 @@ static void __not_in_flash_func(start_next_frame)() {
 //    irq_set_pending(LOW_PRIO_IRQ);
     // ^ is in flash by default
     //printf("Flip done\n");
+    if (wipe_starting) {
+        picovision_write(wipe_frame, (uint32_t*)frame_buffer, sizeof(frame_buffer));
+        sem_release(&display_frame_freed);
+        wipe_starting = 0;
+    }
     sem_release(&xfer_frame);
 }
 

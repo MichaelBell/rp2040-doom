@@ -66,8 +66,6 @@ static const wad_file_t fileo = {
         .path = "<here>",
 };
 
-void picovision_wxd_init();
-
 static wad_file_t *W_Memory_OpenFile(const char *path)
 {
     picovision_wxd_init();

@@ -168,6 +168,8 @@ int pd_flag;
 fixed_t pd_scale;
 
 extern uint8_t __aligned(4) frame_buffer[SCREENWIDTH * SCREENHEIGHT];
+extern uint8_t* wipe_frame;
+extern int8_t wipe_starting;
 static uint8_t __aligned(4) visplane_bit[(SCREENWIDTH / 8) * MAIN_VIEWHEIGHT]; // this is also used for patch decoding in core1 (since flats are done by then)
 static int8_t flatnum_first[256];
 
@@ -1251,9 +1253,6 @@ static uint8_t *decode_flat_to_slot(int cache_slot, int picnum) {
     return flat_data;
 }
 
-static lighttable_t colormap_cache[2][256];
-static const lighttable_t* cached_map[2] = {0};
-
 
 static void flush_visplanes(int8_t *flatnum_next, int numvisplanes) {
 //    printf("FRAME %d %d\n", pd_frame, numvisplanes);
@@ -1381,14 +1380,6 @@ static void flush_visplanes(int8_t *flatnum_next, int numvisplanes) {
 #endif
                             }
                             colormap = xcolormaps + colormap_index * 256;
-#if PICOVISION
-                            lighttable_t* cache = colormap_cache[core];
-                            if (cache != cached_map[core]) {
-                                picovision_read_bytes(colormap, cache, 256);
-                                cached_map[core] = colormap;
-                            }
-                            colormap = cache;
-#endif
 
                             delta = flat_runs[fr].x_start;
                             last_y = flat_runs[fr].y;
@@ -1595,25 +1586,11 @@ static inline void col_render(uint8_t *dest, uint count, const uint8_t *source, 
     );
     xs->col.frac = col_interp->accum[0];
 #else
-#if PICOVISION
-    const uint core = get_core_num();
-    lighttable_t* cache = colormap_cache[core];
-    if (cache != cached_map[core]) {
-        picovision_read_bytes(colormap, cache, 256);
-        cached_map[core] = colormap;
-    }
-    do {
-        *dest = cache[source[(frac >> FRACBITS) & 127]];
-        dest += SCREENWIDTH;
-        frac += fracstep;
-    } while (count--);
-#else
     do {
         *dest = colormap[source[(frac >> FRACBITS) & 127]];
         dest += SCREENWIDTH;
         frac += fracstep;
     } while (count--);
-#endif
 #endif
 }
 
@@ -2375,14 +2352,6 @@ int8_t fuzzpos;
 
 static void draw_fuzz_columns() {
     const lighttable_t *darken_map = xcolormaps + 256 * 6;
-#if PICOVISION
-    lighttable_t* cache = colormap_cache[0];
-    if (darken_map != cached_map[0]) {
-        picovision_read_bytes(darken_map, cache, 256);
-        cached_map[0] = darken_map;
-    }
-    darken_map = cache;
-#endif
     for (int x = 0; x < SCREENWIDTH; x++) {
         int16_t i = fuzzy_column_heads[x];
         while (i >= 0) {
@@ -2647,16 +2616,10 @@ void pd_end_frame(int wipe_start) {
         switch (wipestate) {
             case WIPESTATE_NONE: {
                 if (wipe_start) {
-                    if (gamestate != GS_LEVEL) {
-                        I_VideoBuffer = frame_buffer;
-                        draw_fullscreen_background(0, SCREENHEIGHT);
-                    }
                     if (next_video_type == VIDEO_TYPE_DOUBLE) {
-                        // coming from level already, so draw statusbar
-                        draw_stbar_on_framebuffer(false); // argh it is the wrong status bar
+                        draw_stbar_on_framebuffer(false);
                     }
-                    clip_columns(0, MAIN_VIEWHEIGHT -
-                                    1); // note this is a noop in non GS_LEVEL so don't bother to add if
+                    clip_columns(0, 0); // note this is a noop in non GS_LEVEL so don't bother to add if
                     next_video_type = VIDEO_TYPE_WIPE;
                     // steal space for our wipe data structures
                     memset(cached_flat_picnum, -1, sizeof(cached_flat_picnum));
@@ -2671,35 +2634,28 @@ void pd_end_frame(int wipe_start) {
                         if (wipe_yoffsets_raw[i] > 0) wipe_yoffsets_raw[i] = 0;
                         else if (wipe_yoffsets_raw[i] == -12) wipe_yoffsets_raw[i] = -11;
                     }
-                    wipe_linelookup = (uint32_t *) (wipe_yoffsets + SCREENWIDTH);
-                    uint32_t base;
-#if PICO_ON_DEVICE
-                    base = (uintptr_t) frame_buffer;
-#else
-                    base = 0;
-#endif
-                    for (int i = 0; i < SCREENHEIGHT; i++) {
-                        // TODO: Remove
-                        wipe_linelookup[i] = base + i * SCREENWIDTH;
-                    }
-                    wipestate = WIPESTATE_SKIP3;
+
+                    wipestate = WIPESTATE_REDRAW1;
                     wipe_min = 0;
                 }
                 break;
             }
-#if 0
             case WIPESTATE_SKIP1: {
                 if (wipe_min > 32) wipestate = WIPESTATE_REDRAW1;
                 break;
             }
             case WIPESTATE_REDRAW1: {
-                // we need to render the bottom of the screen
-                clip_columns(MAIN_VIEWHEIGHT - 32,
-                             MAIN_VIEWHEIGHT - 1); // note this is a noop in non GS_LEVEL so don't bother to add if
+                I_VideoBuffer = frame_buffer;
+                V_RestoreBuffer();
                 if (gamestate != GS_LEVEL) {
-                    draw_fullscreen_background(MAIN_VIEWHEIGHT - 32, MAIN_VIEWHEIGHT);
+                    draw_fullscreen_background(0, SCREENHEIGHT);
                 }
-                wipestate = WIPESTATE_SKIP2;
+                else {
+                    draw_stbar_on_framebuffer(true);
+                }
+                clip_columns(0,
+                             MAIN_VIEWHEIGHT - 1); // note this is a noop in non GS_LEVEL so don't bother to add if
+                wipestate = WIPESTATE_SKIP3;
                 break;
             }
             case WIPESTATE_SKIP2: {
@@ -2707,15 +2663,15 @@ void pd_end_frame(int wipe_start) {
                 break;
             }
             case WIPESTATE_REDRAW2: {
+                V_RestoreBuffer();
                 if (gamestate == GS_LEVEL) {
-                    draw_stbar_on_framebuffer(render_frame_index ^ 1, true);
+                    draw_stbar_on_framebuffer(true);
                 } else {
                     draw_fullscreen_background(MAIN_VIEWHEIGHT, SCREENHEIGHT);
                 }
                 wipestate = WIPESTATE_SKIP3;
                 break;
             }
-#endif
             case WIPESTATE_SKIP3: {
                 // todo check we are on the right frame before exiting
                 if (wipe_min >= 200) {
@@ -2942,6 +2898,11 @@ void pd_end_frame(int wipe_start) {
     }
     if (pre_wipe_state == PRE_WIPE_EXTRA_FRAME_NEEDED) {
         pre_wipe_state = PRE_WIPE_EXTRA_FRAME_DONE;
+    }
+
+    if (wipe_start) {
+        picovision_write(wipe_frame, (uint32_t*)frame_buffer, sizeof(frame_buffer));
+        wipe_starting = 1;
     }
 
     next_overlay_index = render_overlay_index;

@@ -81,7 +81,8 @@ byte translated_fds[3];
 const int32_t *whd_sprite_meta;
 const uint16_t *whd_sprite_frame_meta;
 
-const lighttable_t	*colormaps;
+lighttable_t cached_colormaps[(NUMCOLORMAPS+2) * 256];
+const lighttable_t*	colormaps = cached_colormaps;
 
 //
 // MAPTEXTURE_T CACHING
@@ -254,10 +255,12 @@ void R_InitColormaps (void)
     // Load in the light tables,
     //  256 byte align tables.
     lump = W_GetNumForName(DEH_String("COLORMAP"));
-    colormaps = W_CacheLumpNum(lump, PU_STATIC);
-#if PRINT_COLORMAPS
+    const lighttable_t* colormaps_src = W_CacheLumpNum(lump, PU_STATIC);
     int size = W_LumpLength(lump);
     assert(!(size & 0xff));
+    assert(size <= 256 * (NUMCOLORMAPS + 2));
+    picovision_read_bytes(colormaps_src, cached_colormaps, size);
+#if PRINT_COLORMAPS
     printf("\nlighttable_t colormaps[%d * 256] = {\n", size / 256);
     for(int i=0;i<size;i+=32) {
         if (!(i & 0xff)) printf("    // %d \n", i/256);
