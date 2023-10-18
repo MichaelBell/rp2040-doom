@@ -18,7 +18,7 @@ The original Chocolate Doom README is [here](README-chocolate.md).
 ## PicoVision Doom Quickstart
 
 Grab a [PicoVision](https://shop.pimoroni.com/products/picovision), put the doom1.whx file in the root directory of an SD card and insert that in the PicoVision.
-Download doom_tiny_usb from the latest [release](https://github.com/MichaelBell/rp2040-doom/releases/tag/v0.2-vision), load it onto the PicoVision, and away you go!
+Download doom_tiny_usb from the latest [release](https://github.com/MichaelBell/rp2040-doom/releases/latest), load it onto the PicoVision, and away you go!
 
 ## Code State
 
@@ -67,8 +67,8 @@ PicoVision version features:
 * All cheats supported.
 * Demos from original WADs run correctly.
 * USB Keyboard Input support.
-* All end scenes, intermissions, help screens etc. supported.
-* Reasonable frame rate; generally 15-25 FPS.
+* All end scenes, intermissions, help screens etc. supported. (Note end scene likely currently broken - I haven't tested it)
+* Good frame rate; generally 25-35 FPS.
 * Uses 266Mhz overclock
 
 # Building
