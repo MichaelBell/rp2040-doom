@@ -167,12 +167,10 @@ int pd_frame;
 int pd_flag;
 fixed_t pd_scale;
 
-extern uint8_t __aligned(4) frame_buffer[2][SCREENWIDTH * MAIN_VIEWHEIGHT];
+extern uint8_t __aligned(4) frame_buffer[SCREENWIDTH * SCREENHEIGHT];
 static uint8_t __aligned(4) visplane_bit[(SCREENWIDTH / 8) * MAIN_VIEWHEIGHT]; // this is also used for patch decoding in core1 (since flats are done by then)
 static int8_t flatnum_first[256];
 
-static uint8_t *render_frame_buffer;
-static uint8_t render_frame_index;
 static uint8_t render_overlay_index;
 
 static_assert(NO_USE_DC_COLORMAP, "");
@@ -763,9 +761,8 @@ void pd_begin_frame() {
     if (gamestate == GS_LEVEL) {
 //        render_frame_index ^= 1;
     }
-    render_frame_buffer = nullptr;
 #if 0 && !PICO_ON_DEVICE
-    printf("BEGIN FRAME %d rfb %p\n", render_frame_index, render_frame_buffer);
+    printf("BEGIN FRAME\n");
 #endif
     sem_release(&core1_wake);
 
@@ -1115,7 +1112,7 @@ static void reclip_fuzz_columns() {
 static int16_t predraw_visplanes() {
     int16_t free_list = -1;
     for (int x = 0; x < SCREENWIDTH; x++) {
-        uint8_t *screen_col = render_frame_buffer + x;
+        uint8_t *screen_col = frame_buffer + x;
         uint8_t *visplane_bit_col = visplane_bit + x / 8;
         uint8_t visplane_bit_bit = 1u << (x & 7u);
         int16_t *last = &column_heads[x];
@@ -1422,7 +1419,7 @@ static void flush_visplanes(int8_t *flatnum_next, int numvisplanes) {
                         position += delta * step;
 #endif
                         //            printf("partial\n");
-                        uint8_t *p = render_frame_buffer + flat_runs[fr].y * SCREENWIDTH + flat_runs[fr].x_start;
+                        uint8_t *p = frame_buffer + flat_runs[fr].y * SCREENWIDTH + flat_runs[fr].x_start;
                         uint8_t *p_end = p + flat_runs[fr].x_end - flat_runs[fr].x_start;
                         while (p < p_end) {
 #if USE_INTERP
@@ -1486,7 +1483,7 @@ static void draw_visplanes(int16_t fr_list) {
         uint8_t *vp = &visplane_bit[y * (SCREENWIDTH / 8)];
         uint8_t *vp_end = vp + SCREENWIDTH / 8;
         uint bit = 0;
-        uint8_t *p0 = &render_frame_buffer[y * SCREENWIDTH];
+        uint8_t *p0 = &frame_buffer[y * SCREENWIDTH];
         uint8_t *p = p0;
         while (vp != vp_end) {
 //            printf("y %d, x %d + %d = %02x\n", y, (int)(vp- &visplane_bit[y * (SCREENWIDTH / 8)]), bit, *vp);
@@ -1937,7 +1934,7 @@ static void draw_patch_columns(int patch_num, int patch_head, int16_t *col_heads
 #endif
                 do {
                     const auto &c = render_cols[i & 0x7fffu];
-                    uint8_t *p = render_frame_buffer + __mul_instruction(c.yl, SCREENWIDTH) + c.x +
+                    uint8_t *p = frame_buffer + __mul_instruction(c.yl, SCREENWIDTH) + c.x +
                                  ((i & 0x8000u) >> 7u);
                     assert (c.texturemid != TEXTUREMID_PLANE);
                     fixed_t fracstep = DDA_UP_SHIFT(c.scale);
@@ -1949,7 +1946,7 @@ static void draw_patch_columns(int patch_num, int patch_head, int16_t *col_heads
             } else {
                 do {
                     const auto &c = render_cols[i & 0x7fffu];
-                    uint8_t *p = render_frame_buffer + __mul_instruction(c.yl, SCREENWIDTH) + c.x +
+                    uint8_t *p = frame_buffer + __mul_instruction(c.yl, SCREENWIDTH) + c.x +
                                  ((i & 0x8000u) >> 7u);
 #if NO_USE_DC_COLORMAP
                     should_be_const lighttable_t *dc_colormap = colormaps + 256 * c.colormap_index;
@@ -2247,7 +2244,7 @@ static void draw_composite_columns(int texture_num, int tex_head) {
     #endif
                             do {
                                 const auto &c = render_cols[i & 0x7fffu];
-                                uint8_t *p = render_frame_buffer + __mul_instruction(c.yl, SCREENWIDTH) + c.x +
+                                uint8_t *p = frame_buffer + __mul_instruction(c.yl, SCREENWIDTH) + c.x +
                                              ((i & 0x8000u) >> 7u);
                                 assert (c.texturemid != TEXTUREMID_PLANE);
                                 fixed_t fracstep = DDA_UP_SHIFT(c.scale);
@@ -2259,7 +2256,7 @@ static void draw_composite_columns(int texture_num, int tex_head) {
                         } else {
                             do {
                                 const auto &c = render_cols[i & 0x7fffu];
-                                uint8_t *p = render_frame_buffer + __mul_instruction(c.yl, SCREENWIDTH) + c.x +
+                                uint8_t *p = frame_buffer + __mul_instruction(c.yl, SCREENWIDTH) + c.x +
                                              ((i & 0x8000u) >> 7u);
     #if NO_USE_DC_COLORMAP
                                 should_be_const lighttable_t *dc_colormap = colormaps + 256 * c.colormap_index;
@@ -2277,7 +2274,7 @@ static void draw_composite_columns(int texture_num, int tex_head) {
                     do {
                         const auto &c = render_cols[i & 0x7fffu];
                         uint8_t *p =
-                                render_frame_buffer + __mul_instruction(c.yl, SCREENWIDTH) + c.x + ((i & 0x8000u) >> 7u);
+                                frame_buffer + __mul_instruction(c.yl, SCREENWIDTH) + c.x + ((i & 0x8000u) >> 7u);
                         assert (c.texturemid != TEXTUREMID_PLANE);
     #if NO_USE_DC_COLORMAP
                         should_be_const lighttable_t *dc_colormap = colormaps + 256 * c.colormap_index;
@@ -2390,7 +2387,7 @@ static void draw_fuzz_columns() {
         int16_t i = fuzzy_column_heads[x];
         while (i >= 0) {
             const auto &c = render_cols[i];
-            uint8_t *screen_col = render_frame_buffer + x;
+            uint8_t *screen_col = frame_buffer + x;
             int yl = c.yl;
             int yh = c.yh;
             assert(yl <= MAIN_VIEWHEIGHT);
@@ -2490,47 +2487,36 @@ extern "C" int M_Random();
 void maybe_draw_single_screen(int patch_num) {
     if (sub_gamestate == 0) {
         next_video_type = VIDEO_TYPE_SINGLE;
-        draw_splash(patch_num, 0, MAIN_VIEWHEIGHT, frame_buffer[render_frame_index]);
+        draw_splash(patch_num, 0, SCREENHEIGHT, frame_buffer);
         sub_gamestate = 1;
     } else if (sub_gamestate == 1) {
-        draw_splash(patch_num, MAIN_VIEWHEIGHT, SCREENHEIGHT,
-                    frame_buffer[render_frame_index^1] + (MAIN_VIEWHEIGHT - 32) * SCREENWIDTH);
+        //draw_splash(patch_num, MAIN_VIEWHEIGHT, SCREENHEIGHT,
+        //            frame_buffer[render_frame_index^1] + (MAIN_VIEWHEIGHT - 32) * SCREENWIDTH);
+        // TODO: Remove
         sub_gamestate = 2;
     }
 }
 
-void draw_stbar_on_framebuffer(int frame, boolean refresh) {
+void draw_stbar_on_framebuffer(boolean refresh) {
+    // TODO: Is this required at all?
     V_BeginPatchList(vpatchlists->framebuffer);
     // we call ST_drawwidgets directly as we don't want to mess with palette stuff (we call this during startup when not initialized)
 //    ST_Drawer(false, refresh);
     ST_drawWidgets(refresh);
     // draw the status bar onto the bottom (now non visible part of the top buffer)
-    I_VideoBuffer = frame_buffer[frame] - 32 * SCREENWIDTH;
-    V_RestoreBuffer();
     V_DrawPatchList(vpatchlists->framebuffer);
-    I_VideoBuffer = render_frame_buffer;
 }
 
 static void draw_framebuffer_patches_fullscreen() {
     V_RestoreBuffer();
-    vpatch_clip_bottom = MAIN_VIEWHEIGHT;
     V_DrawPatchList(vpatchlists->framebuffer);
-    I_VideoBuffer = frame_buffer[render_frame_index^1] - 32 * SCREENWIDTH;
-    V_RestoreBuffer();
-    vpatch_clip_top = SCREENHEIGHT-32;
-    vpatch_clip_bottom = SCREENHEIGHT;
-    V_DrawPatchList(vpatchlists->framebuffer);
-    vpatch_clip_top = 0;
-    I_VideoBuffer = frame_buffer[render_frame_index];
+    I_VideoBuffer = frame_buffer;
 }
 
 void draw_fullscreen_background(int top, int bottom) {
     assert(top < bottom);
-    assert((top < MAIN_VIEWHEIGHT && bottom <= MAIN_VIEWHEIGHT) ||
-           (top >= MAIN_VIEWHEIGHT && bottom > MAIN_VIEWHEIGHT));
     int patch_num = 0;
-    byte *top_pixel = top < MAIN_VIEWHEIGHT ? render_frame_buffer + top * SCREENWIDTH :
-                        frame_buffer[render_frame_index^1] + (top - 32) * SCREENWIDTH;
+    byte *top_pixel = frame_buffer + top * SCREENWIDTH;
     switch (gamestate) {
         case GS_INTERMISSION:
             patch_num = wi_background_patch_num;
@@ -2587,21 +2573,18 @@ void draw_fullscreen_background(int top, int bottom) {
         // need to draw the initial text
         V_BeginPatchList(vpatchlists->framebuffer);
         WI_Drawer();
-        if (top >= MAIN_VIEWHEIGHT) {
-            I_VideoBuffer = frame_buffer[render_frame_index ^ 1] - 32 * SCREENWIDTH;
-        }
         V_RestoreBuffer();
         vpatch_clip_top = top;
         vpatch_clip_bottom = bottom;
         V_DrawPatchList(vpatchlists->framebuffer);
         vpatch_clip_top = 0;
         vpatch_clip_bottom = SCREENHEIGHT;
-        I_VideoBuffer = render_frame_buffer;
+        I_VideoBuffer = frame_buffer;
     }
 }
 
 static void uh_oh_discard_columns(int render_col_limit) {
-//    memset(render_frame_buffer, 0xfc, SCREENWIDTH * MAIN_VIEWHEIGHT); // not quite right in clip
+//    memset(frame_buffer, 0xfc, SCREENWIDTH * MAIN_VIEWHEIGHT); // not quite right in clip
     for (int x = 0; x < SCREENWIDTH * 2; x++) { // >= SCREENWIDTH these are fuzzy columns
         int16_t *last = &column_heads[x];
         int16_t i = *last;
@@ -2610,7 +2593,7 @@ static void uh_oh_discard_columns(int render_col_limit) {
             if (i >= render_col_limit) {
                 // we have to throw it out, but we will draw something - black is as good as anything i guess
                 if (x < SCREENWIDTH) {
-                    uint8_t *dest = render_frame_buffer + x + c.yl * SCREENWIDTH;
+                    uint8_t *dest = frame_buffer + x + c.yl * SCREENWIDTH;
                     for(int y = c.yh -c.yl; y >= 0; y--, dest += SCREENWIDTH) {
                         *dest = 0;
                     }
@@ -2644,15 +2627,8 @@ void pd_end_frame(int wipe_start) {
     sem_acquire_blocking(&display_frame_freed);
     bool showing_help = inhelpscreens;
     static boolean was_in_help;
-    if (gamestate == GS_LEVEL) {
-        if (!wipestate && (!showing_help || !was_in_help)) render_frame_index ^= 1;
-    } else {
-        // we expect all the rendering code to be a no-op
-        assert(render_col_count == 0);
-    }
-    render_frame_buffer = frame_buffer[render_frame_index];
 #if 0 && !PICO_ON_DEVICE
-    printf("END FRAME %d %p ws %d cols %d\n", render_frame_index, render_frame_buffer, wipe_start, render_col_count);
+    printf("END FRAME ws %d cols %d\n", wipe_start, render_col_count);
 #endif
 
     DEBUG_PINS_SET(full_render, 1);
@@ -2672,16 +2648,14 @@ void pd_end_frame(int wipe_start) {
             case WIPESTATE_NONE: {
                 if (wipe_start) {
                     if (gamestate != GS_LEVEL) {
-                        render_frame_index ^= 1;
-                        render_frame_buffer = frame_buffer[render_frame_index];
-                        I_VideoBuffer = render_frame_buffer;
-                        draw_fullscreen_background(0, MAIN_VIEWHEIGHT - 32);
+                        I_VideoBuffer = frame_buffer;
+                        draw_fullscreen_background(0, SCREENHEIGHT);
                     }
                     if (next_video_type == VIDEO_TYPE_DOUBLE) {
                         // coming from level already, so draw statusbar
-                        draw_stbar_on_framebuffer(render_frame_index, false); // argh it is the wrong status bar
+                        draw_stbar_on_framebuffer(false); // argh it is the wrong status bar
                     }
-                    clip_columns(0, MAIN_VIEWHEIGHT - 32 -
+                    clip_columns(0, MAIN_VIEWHEIGHT -
                                     1); // note this is a noop in non GS_LEVEL so don't bother to add if
                     next_video_type = VIDEO_TYPE_WIPE;
                     // steal space for our wipe data structures
@@ -2698,25 +2672,22 @@ void pd_end_frame(int wipe_start) {
                         else if (wipe_yoffsets_raw[i] == -12) wipe_yoffsets_raw[i] = -11;
                     }
                     wipe_linelookup = (uint32_t *) (wipe_yoffsets + SCREENWIDTH);
-                    uint screen_front = render_frame_index ^ 1; // what was currently displayed
                     uint32_t base;
 #if PICO_ON_DEVICE
-                    base = (uintptr_t) &frame_buffer[0][0];
+                    base = (uintptr_t) frame_buffer;
 #else
                     base = 0;
 #endif
                     for (int i = 0; i < SCREENHEIGHT; i++) {
-                        if (i < MAIN_VIEWHEIGHT)
-                            wipe_linelookup[i] = base + screen_front * SCREENWIDTH * MAIN_VIEWHEIGHT + i * SCREENWIDTH;
-                        else
-                            wipe_linelookup[i] =
-                                    base + (screen_front ^ 1) * SCREENWIDTH * MAIN_VIEWHEIGHT + (i - 32) * SCREENWIDTH;
+                        // TODO: Remove
+                        wipe_linelookup[i] = base + i * SCREENWIDTH;
                     }
-                    wipestate = WIPESTATE_SKIP1;
+                    wipestate = WIPESTATE_SKIP3;
                     wipe_min = 0;
                 }
                 break;
             }
+#if 0
             case WIPESTATE_SKIP1: {
                 if (wipe_min > 32) wipestate = WIPESTATE_REDRAW1;
                 break;
@@ -2744,6 +2715,7 @@ void pd_end_frame(int wipe_start) {
                 wipestate = WIPESTATE_SKIP3;
                 break;
             }
+#endif
             case WIPESTATE_SKIP3: {
                 // todo check we are on the right frame before exiting
                 if (wipe_min >= 200) {
@@ -2755,7 +2727,7 @@ void pd_end_frame(int wipe_start) {
             }
         }
     }
-    I_VideoBuffer = render_frame_buffer;
+    I_VideoBuffer = frame_buffer;
     if (wipestate) list_buffer_limit -= 4096;
     // we need to use the lower limit of this frame and the last since the final wipe frame may still be using the data
     uint8_t *this_time_limit = std::min(list_buffer_limit, last_list_buffer_limit);
@@ -2791,7 +2763,7 @@ void pd_end_frame(int wipe_start) {
             if (not_fully_covered_cols[i]) {
                 for (int j = 0; j < 32; j++) {
                     if (not_fully_covered_cols[i] & (1u << j)) {
-                        uint32_t *dest = (uint32_t *) (render_frame_buffer + i * 4 * 32 + j * 4 +
+                        uint32_t *dest = (uint32_t *) (frame_buffer + i * 4 * 32 + j * 4 +
                                                        not_fully_covered_yl * SCREENHEIGHT);
                         for (int y = not_fully_covered_yl; y <= not_fully_covered_yh; y++, dest += SCREENWIDTH / 4) {
                             *dest = 0;
@@ -2860,9 +2832,7 @@ void pd_end_frame(int wipe_start) {
                     // todo we don't need to check wi_background_patch_num
                     if (post_wipecount == 1 && wi_background_patch_num) {
                         // at this point the text should be drawn by overlay, so we must erease it from the background
-                        draw_splash(wi_background_patch_num, 0, MAIN_VIEWHEIGHT, frame_buffer[render_frame_index]);
-                        draw_splash(wi_background_patch_num, MAIN_VIEWHEIGHT, SCREENHEIGHT,
-                                    frame_buffer[render_frame_index ^ 1] + (MAIN_VIEWHEIGHT - 32) * SCREENWIDTH);
+                        draw_splash(wi_background_patch_num, 0, SCREENHEIGHT, frame_buffer);
                     }
                     post_wipecount++;
                 }
@@ -2885,7 +2855,7 @@ void pd_end_frame(int wipe_start) {
                     if (last_scroll > scroll) last_scroll = 0;
                     if (scroll > last_scroll) {
                         // i think using the list buffer here as scratch space is fine ... you'll get a garbage column if you start a new game half way thru the scroll!! i don't think i care!
-                        next_video_scroll = list_buffer + SCREENHEIGHT * render_frame_index;
+                        next_video_scroll = list_buffer;
                         int patch_num = W_GetNumForName("PFUB2");
                         if (scroll != SCREENWIDTH) {
                             draw_splash(patch_num, 0, SCREENHEIGHT, next_video_scroll, SCREENWIDTH - 1 - scroll);
@@ -2904,13 +2874,6 @@ void pd_end_frame(int wipe_start) {
             case GS_DEMOSCREEN: {
                 //assert(num_framedrawables == 0);
                 if (!wipestate) {
-                    static bool warmup_done;
-                    if (!warmup_done) {
-                        // hack alert: we draw the status bar (to be immediately overdrawn) as a first thing so that we don't have a cold cache
-                        // when we draw it in the middle of the first wipe where it causes a cache fight with the video_newhope scanline stuff
-                        draw_stbar_on_framebuffer(render_frame_index, false);
-                        warmup_done = true;
-                    }
                     int pnum = W_GetNumForName(pagename);
                     assert(pnum);
                     maybe_draw_single_screen(pnum);
@@ -2981,7 +2944,6 @@ void pd_end_frame(int wipe_start) {
         pre_wipe_state = PRE_WIPE_EXTRA_FRAME_DONE;
     }
 
-    next_frame_index = render_frame_index;
     next_overlay_index = render_overlay_index;
     render_overlay_index ^= 1;
 #if !DEMO1_ONLY
@@ -3032,10 +2994,6 @@ void pd_start_save_pause(void) {
     }
     sem_acquire_blocking(&display_frame_freed);
     old_video_type = next_video_type;
-    // this should be the case
-    if (old_video_type == VIDEO_TYPE_DOUBLE) {
-        draw_stbar_on_framebuffer(render_frame_index ^ 1, false);
-    }
     next_video_type = VIDEO_TYPE_SAVING;
     picovision_notify_next_vsync();
     sem_release(&render_frame_ready);
@@ -3135,17 +3093,10 @@ void draw_cast_sprite(int sprite_lump) {
         }
     }
     // to save having a new overlay mode, we'll render to an off screen buffer and attempt to copy this avoiding the scanline (or not - perhaps we don't really care)
-    render_frame_buffer = frame_buffer[render_frame_index ^ 1];
     const int top = 41; // window top -> top + height is the window we care about
     // draw the bit of the background we need
-    draw_splash(W_GetNumForName("BOSSBACK"), top, top + height, render_frame_buffer);
+    draw_splash(W_GetNumForName("BOSSBACK"), top, top + height, frame_buffer);
     // draw the stuff over the top
     draw_patch_columns(firstspritelump+sprite_lump, head, (int16_t *) buffer, buffer + WHD_PATCH_MAX_WIDTH * 2, 0);
-
-    // now blit to the screen (could have waited for a vsync here but i don't see any flickering)
-    static_assert(top + height > MAIN_VIEWHEIGHT, ""); // just to check we need to split this copy into two bits
-    memcpy(frame_buffer[render_frame_index] + top * SCREENWIDTH, render_frame_buffer, (MAIN_VIEWHEIGHT - top) * SCREENWIDTH);
-    // bottom bit goes on the last 32 pixels of the other buffer
-    memcpy(render_frame_buffer + (MAIN_VIEWHEIGHT-32) * SCREENWIDTH, render_frame_buffer + (MAIN_VIEWHEIGHT - top) * SCREENWIDTH, (top + height - MAIN_VIEWHEIGHT) * SCREENWIDTH);
 }
 #endif

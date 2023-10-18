@@ -140,7 +140,7 @@ unsigned int joywait = 0;
 
 pixel_t *I_VideoBuffer; // todo can't have this
 
-uint8_t __aligned(4) frame_buffer[2][SCREENWIDTH*MAIN_VIEWHEIGHT];
+uint8_t __aligned(4) frame_buffer[SCREENWIDTH*SCREENHEIGHT];
 static uint8_t palette[256*3];
 static uint8_t __scratch_x("shared_pal") shared_pal[NUM_SHARED_PALETTES][16];
 static int8_t next_pal=-1;
@@ -318,7 +318,6 @@ void I_FinishUpdate (void)
 {
 }
 
-uint8_t display_frame_index;
 uint8_t display_overlay_index;
 uint8_t display_video_type;
 
@@ -342,7 +341,6 @@ uint8_t *wipe_yoffsets; // position of start of y in each column
 int16_t *wipe_yoffsets_raw;
 uint32_t *wipe_linelookup; // offset of each line from start of screenbuffer (can be negative for FB 1 to FB 0)
 uint8_t next_video_type;
-uint8_t next_frame_index; // todo combine with video type?
 uint8_t next_overlay_index;
 #if !DEMO1_ONLY
 uint8_t *next_video_scroll;
@@ -576,7 +574,7 @@ static void __noinline render_text_mode_scanline(scanvideo_scanline_buffer_t *bu
 
 static uint32_t* __not_in_flash_func(scanline_func_double)(uint32_t *dest, int scanline) {
     if (scanline < MAIN_VIEWHEIGHT) {
-        const uint8_t *src = frame_buffer[display_frame_index] + scanline * SCREENWIDTH;
+        const uint8_t *src = frame_buffer + scanline * SCREENWIDTH;
 //        if (scanline == 100) {
 //            printf("SL %d %p\n", display_frame_index, &frame_buffer[display_frame_index]);
 //        }
@@ -592,12 +590,7 @@ static uint32_t* __not_in_flash_func(scanline_func_double)(uint32_t *dest, int s
 }
 
 static uint32_t* __not_in_flash_func(scanline_func_single)(uint32_t *dest, int scanline) {
-    uint8_t *src;
-    if (scanline < MAIN_VIEWHEIGHT) {
-        src = frame_buffer[display_frame_index] + scanline * SCREENWIDTH;
-    } else {
-        src = frame_buffer[display_frame_index^1] + (scanline - 32) * SCREENWIDTH;
-    }
+    uint8_t *src = frame_buffer + scanline * SCREENWIDTH;
 #if !DEMO1_ONLY
     if (video_scroll) {
         for(int i=SCREENWIDTH-1;i>0;i--) {
@@ -614,7 +607,7 @@ static uint32_t* __not_in_flash_func(scanline_func_single)(uint32_t *dest, int s
 }
 
 static uint32_t* scanline_func_wipe(uint32_t *dest, int scanline) {
-    const uint8_t *src;
+    const uint8_t *src = frame_buffer;
 #if 0
     if (scanline < MAIN_VIEWHEIGHT) {
         src = frame_buffer[display_frame_index^1] + scanline * SCREENWIDTH;
@@ -624,11 +617,6 @@ static uint32_t* scanline_func_wipe(uint32_t *dest, int scanline) {
     palette_convert_scanline(dest, src);
     return;
 #endif
-    if (scanline < MAIN_VIEWHEIGHT) {
-        src = frame_buffer[display_frame_index];
-    } else {
-        src = frame_buffer[display_frame_index^1] - 32 * SCREENWIDTH;
-    }
     assert(wipe_yoffsets && wipe_linelookup);
     uint8_t *d = (uint8_t *)dest;
     src += scanline * SCREENWIDTH;
@@ -644,7 +632,7 @@ static uint32_t* scanline_func_wipe(uint32_t *dest, int scanline) {
             flip = &frame_buffer[0][0] + wipe_linelookup[rel];
 #endif
             // todo better protection here
-            if (flip >= &frame_buffer[0][0] && flip < &frame_buffer[0][0] + 2 * SCREENWIDTH * MAIN_VIEWHEIGHT) {
+            if (flip >= &frame_buffer[0] && flip < &frame_buffer[0] + SCREENWIDTH * SCREENHEIGHT) {
                 d[i] = flip[i];
             }
         }
@@ -928,7 +916,6 @@ bool __no_inline_not_in_flash_func(new_frame_stuff)() {
         frame_ready = true;
         sem_acquire_blocking(&render_frame_ready);
         display_video_type = next_video_type;
-        display_frame_index = next_frame_index;
         display_overlay_index = next_overlay_index;
 #if !DEMO1_ONLY
         video_scroll = next_video_scroll; // todo does this waste too much space
@@ -1182,8 +1169,8 @@ static void core1() {
 void I_InitGraphics(void)
 {
     stbar = resolve_vpatch_handle(VPATCH_STBAR);
-    sem_init(&render_frame_ready, 0, 2);
-    sem_init(&display_frame_freed, 1, 2);
+    sem_init(&render_frame_ready, 0, 1);
+    sem_init(&display_frame_freed, 1, 1);
     sem_init(&core1_launch, 0, 1);
     sem_init(&xfer_frame, 1, 1);
     pd_init();

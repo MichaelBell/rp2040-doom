@@ -544,10 +544,6 @@ typedef struct
 } spritedef_t;
 #endif
 
-#if PICODOOM_RENDER_BABY
-extern uint8_t render_frame_index;
-#endif
-
 #if !NO_VISPLANES
 
 //

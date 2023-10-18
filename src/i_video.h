@@ -124,7 +124,6 @@ enum {
 #define FIRST_VIDEO_TYPE_WITH_OVERLAYS VIDEO_TYPE_DOUBLE
 
 extern uint8_t next_video_type;
-extern uint8_t next_frame_index; // next frame_index to be picked up by the diplsau
 extern uint8_t next_overlay_index;
 #if !DEMO1_ONLY
 extern uint8_t *next_video_scroll;
